@@ -1,0 +1,65 @@
+name: Lab server administration
+run-name: Lab server — ${{ inputs.operation }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Read-only lab operation
+        type: choice
+        options: [connectivity, inventory]
+        default: connectivity
+      host:
+        description: Disposable lab server IPv4 address (public workflow input)
+        required: true
+        type: string
+      host_fingerprint:
+        description: ED25519 SHA256 fingerprint verified in the provider console
+        required: true
+        type: string
+      port:
+        description: SSH port
+        default: '22'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vpn-lab-administration
+  cancel-in-progress: false
+
+jobs:
+  connectivity:
+    if: github.repository == 'efrgdgr0024345/vpn' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Verify SSH connectivity and pinned host identity
+        env:
+          VPN_LAB_HOST: ${{ inputs.host }}
+          VPN_LAB_HOST_FINGERPRINT: ${{ inputs.host_fingerprint }}
+          VPN_LAB_PORT: ${{ inputs.port }}
+        run: /usr/bin/python3 -I -B ci/lab_admin.py connectivity
+
+  inventory:
+    needs: connectivity
+    if: inputs.operation == 'inventory' && github.repository == 'efrgdgr0024345/vpn' && github.ref == 'refs/heads/main'
+    environment: vpn-lab
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Read approved lab inventory over verified SSH
+        env:
+          VPN_LAB_HOST: ${{ inputs.host }}
+          VPN_LAB_HOST_FINGERPRINT: ${{ inputs.host_fingerprint }}
+          VPN_LAB_PORT: ${{ inputs.port }}
+          VPN_LAB_SSH_PRIVATE_KEY: ${{ secrets.VPN_LAB_SSH_PRIVATE_KEY }}
+        run: /usr/bin/python3 -I -B ci/lab_admin.py inventory

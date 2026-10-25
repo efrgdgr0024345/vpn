@@ -35,6 +35,10 @@ in this repository.
 the separate temporary-droplet stage. The workflow uses disposable runners and
 has no production deployment or production credentials.
 
+[GitHub lab administration](GITHUB_LAB.md) describes the separate manual SSH
+connectivity/inventory workflow and its dedicated, expiring lab key. This does
+not yet install a VPN server or implement the staged-login proposal.
+
 The proposed next system is described in [NEW_VPN_DESIGN.md](NEW_VPN_DESIGN.md).
 That architecture is a design proposal; it is not implemented by this installer.
 

@@ -46,7 +46,20 @@ jobs:
       - name: Run unit and security regression tests
         working-directory: vpn-dashboard
         run: python3 -m unittest discover -s tests -v
+      - name: Test lab SSH safeguards and key authorization
+        run: python3 -m unittest discover -s ci/tests -v
       - name: Open and close the real Tk dashboard on a virtual display
         run: timeout 20s xvfb-run --auto-servernum python3 ci/desktop_smoke.py
       - name: Check real nftables readback in a separate network namespace
         run: sudo /usr/bin/python3 -I -B ci/nft_smoke.py
+
+  ssh-integration:
+    name: Real SSH administration safeguards (Debian 13)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Exercise actual OpenSSH without production credentials
+        run: sh ci/test_ssh_container.sh

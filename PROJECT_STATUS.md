@@ -173,6 +173,27 @@ or data have been changed by this task, and the new server design remains
 unimplemented. A console-run installer or a separately configured GitHub SSH
 runner is needed if direct access cannot be established.
 
+## GitHub runner administration follow-up
+
+The user selected GitHub Actions. A manual, main-branch-only lab workflow now
+provides pinned-host connectivity checks and fixed read-only SSH inventory.
+The console bootstrap provisions a dedicated root SSH key with a 24-hour
+authorized-key expiry. It preserves unrelated keys and can remove the obsolete
+key explicitly identified by the user. No actual lab key is in the repository.
+
+Twelve new safeguard tests and an actual OpenSSH integration test pass locally.
+The integration ran in an unexposed Debian 13 container and verified real root
+SSH inventory, expired-key refusal and same-key renewal. No lab/server changes
+are claimed from these disposable-container results. See GITHUB_LAB.md.
+
+The environment-creation API also returns HTTP 403, "Resource not accessible by
+integration". The owner needs to create `vpn-lab`, restrict deployments to `main`
+and save its dedicated private key directly as the environment secret
+`VPN_LAB_SSH_PRIVATE_KEY`. This is GitHub permission setup, not a request to send
+secret material to the assistant. Default-branch publication and actual lab
+reachability are recorded below as confirmed; initial admin operations do not
+install or remove server software.
+
 ## Recovery actions after isolated testing
 
 Keep the existing root recovery console open. Inspect Access Server's current
