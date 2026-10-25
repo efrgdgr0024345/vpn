@@ -84,7 +84,7 @@ are preserved; the history audit itself did not push or rewrite refs.
 | Original uploaded `vpn-dashboard.zip` | 14 files; preserved as the original input. |
 | `vpn-dashboard-hardened.zip` | Older 27-file snapshot; predates the guided installer and later documentation. |
 | `vpn-dashboard-installer.zip` | 30-file snapshot predating the certificate-name fix and newer design/status documentation. |
-| `vpn-dashboard-compatibility-fix.zip` | New local source snapshot including the certificate-name fix and current documentation; not a verified live deployment. |
+| `vpn-dashboard-compatibility-fix.zip` | Historical local snapshot including the certificate-name fix; predates the nft readback fix and CI work. Use the test branch for the latest source. |
 
 Both older distributed ZIP integrity checks passed during the audit. They were
 not replaced. Their hashes below identify the preserved historical snapshots;
@@ -139,9 +139,12 @@ Four regressions were added. All 109 tests, real Tk rendering/closure under Xvfb
 and real nft install/readback plus added-bypass refusal pass in that container.
 Networking changes occurred only inside a fresh network namespace, and the
 container shares the workspace host's kernel. No live VPN connection was tested.
-The same 109-test suite and real nftables check also passed in a disposable
-Ubuntu 22.04 container. The test branch is `test/isolated-vpn-validation`;
-GitHub-hosted results still need independent verification.
+The same 109-test suite, Tk startup/closure and real nftables check also passed in
+a disposable Ubuntu 22.04 container. The implementation and CI workflow were
+committed as `d973f339a8764c234ca5d7bdccf0124250354cc0` and pushed to
+`test/isolated-vpn-validation`; a remote-ref read confirmed publication. Remote
+`main` remains at the initial README-only commit. GitHub-hosted results still
+need independent verification because Actions API access is blocked here.
 
 No DigitalOcean connector or API credential is configured. No test droplet has
 been created, no cloud charges incurred by this task, and no production SSH

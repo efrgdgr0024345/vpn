@@ -2,7 +2,7 @@
 
 This describes client-side code, not changes to the live Access Server VPS.
 The follow-up audit in [PROJECT_STATUS.md](PROJECT_STATUS.md) records the certificate-name
-compatibility finding, its subsequent local fix, and the current local-only Git state.
+compatibility findings, their fixes, and publication of the isolated test branch.
 
 The uploaded application has now been changed. The initial review findings are
 addressed as follows; deployment on the actual Linux host is still required.
@@ -65,3 +65,11 @@ produces a candidate batch for a new table, not an automatic migration.
 Tests include adversarial profile/trust checks, an independently authored JSON
 policy fixture, mocked host commands, and real harmless child-process and file
 permission checks. See [VALIDATION.md](vpn-dashboard/VALIDATION.md) for results.
+
+The CI preparation also exercised real nftables installation/readback in isolated
+network namespaces with Ubuntu 22.04/24.04 userspace. It found and fixed rejection
+of equivalent kernel readback: explicit IPv4-family matches can be omitted beside
+positive IPv4 address matches, and conntrack state membership uses equality.
+Normalization is limited to those forms; endpoint/address/UID restrictions and
+rejection of unexpected bypasses remain covered. These checks and real Tk startup
+do not replace target-host traffic, installation or VPN connection testing.
