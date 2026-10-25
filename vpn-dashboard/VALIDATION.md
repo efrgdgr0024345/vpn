@@ -82,5 +82,9 @@ and 24.04. All 109 tests, the dashboard smoke check and actual nftables readback
 passed in local disposable Ubuntu 22.04 and 24.04 containers. Those containers
 use the execution host's kernel, not separate Ubuntu kernels. Policy/account lookups in
 the nft smoke check use fixture metadata; nft execution and readback are real.
-GitHub run results must be checked separately; local container results are not
-reported as GitHub-hosted results. No production credentials are used by CI.
+GitHub results were subsequently verified through the Actions API: both Ubuntu
+jobs in [run 40162859451](https://github.com/efrgdgr0024345/vpn/actions/runs/40162859451)
+passed the source checks, unit/security suite, Tk smoke test and real nftables
+namespace check for commit `b76990ce3855906d4f7bd87f28d72fefe935d4dc`.
+No production credentials are used by CI. Debian 13 server installation and real
+VPN connectivity remain untested.

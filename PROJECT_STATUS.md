@@ -126,10 +126,12 @@ installer ZIP    2f2d573e67c1053b7b4bab5f46daf1037274735e8e56288b791bae00b67d8ab
 
 The existing 105 tests passed again before adding the CI workflow. Python/shell
 syntax and example JSON checks pass locally, and the workflow YAML parses.
-Git remote reads work. GitHub CLI has authentication configured, but both REST
-and GraphQL API requests are currently refused by the environment's network
-proxy. Authentication configuration alone does not establish API access or
-permission to push. No GitHub Actions execution is claimed at this point.
+Git remote reads and test-branch pushes worked before API access was available.
+The first REST/GraphQL attempts were refused by the environment network proxy.
+After a targeted network draft was saved and the user published the environment,
+GitHub API reads succeeded. This does not grant all GitHub administration rights:
+the Actions secrets public-key endpoint returns HTTP 403, "Resource not accessible
+by integration". No personal access token was requested as a workaround.
 
 The disposable Ubuntu 24.04 test exposed nft readback differences: redundant
 IPv4 family checks disappear beside positive IPv4 address matches, and state-set
@@ -143,18 +145,33 @@ The same 109-test suite, Tk startup/closure and real nftables check also passed 
 a disposable Ubuntu 22.04 container. The implementation and CI workflow were
 committed as `d973f339a8764c234ca5d7bdccf0124250354cc0` and pushed to
 `test/isolated-vpn-validation`; a remote-ref read confirmed publication. Remote
-`main` remains at the initial README-only commit. GitHub-hosted results still
-need independent verification because Actions API access is blocked here.
+`main` remains at the initial README-only commit. GitHub-hosted results were then
+verified through the API: [run 40162859451](https://github.com/efrgdgr0024345/vpn/actions/runs/40162859451)
+completed successfully for commit `b76990ce3855906d4f7bd87f28d72fefe935d4dc`.
+Both Ubuntu 22.04 and 24.04 jobs report successful source checks, unit/security
+tests, real Tk smoke checks and isolated nftables readback. The earlier run for
+the implementation commit also succeeded. These results do not test a VPN
+connection or production deployment.
 
 No DigitalOcean connector or API credential is configured. No test droplet has
 been created, no cloud charges incurred by this task, and no production SSH
-connection established. A temporary SSH key was prepared outside the repository;
-it has not been confirmed authorized on any VPS. See TESTING.md for the separate
-client/server test stages.
+connection established. The user supplied provider-console output confirming
+Debian 13, SSH listening on port 22, and successful addition of the temporary
+public key on a separate disposable lab droplet. Its host-key fingerprint was
+supplied out of band, but a network scan has not reached that host, so no scanned
+host key has been compared or SSH authentication attempted. Publishing recreated
+the runtime without the corresponding private key formerly stored in `/tmp`.
+That old authorized key should be removed during the next console setup step.
+Direct SSH is still refused after the network change; its precise refusal source
+is not established. GitHub-runner SSH administration is not configured or tested.
+See TESTING.md for the separate client/server test stages.
 
-The user chose a clean Ubuntu droplet for the new design rather than a matching
-Access Server appliance. The target is a separate Ubuntu 24.04 LTS test server.
-Creation/access are still pending; the new server design remains unimplemented.
+The user initially chose clean Ubuntu for the new design, then selected an
+existing Debian 13 droplet for reuse and authorized discarding its old contents.
+It remains separate from the working Access Server. No server packages, settings
+or data have been changed by this task, and the new server design remains
+unimplemented. A console-run installer or a separately configured GitHub SSH
+runner is needed if direct access cannot be established.
 
 ## Recovery actions after isolated testing
 
