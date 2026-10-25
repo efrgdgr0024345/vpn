@@ -90,5 +90,7 @@ the actual console bootstrap, verifies a pinned SSH inventory, rejects an expire
 key, renews that same key and confirms restored access. Package signatures stay
 enabled. The existing 109-test desktop suite, Xvfb and nft checks remain separate.
 
-Local unit and real SSH integration tests pass. GitHub-hosted validation and
-actual lab reachability are recorded in PROJECT_STATUS.md as verified.
+Local tests and [GitHub-hosted validation](https://github.com/efrgdgr0024345/vpn/actions/runs/40166128639)
+pass. The [initial connectivity run](https://github.com/efrgdgr0024345/vpn/actions/runs/40166246400)
+reached the actual lab droplet and verified the provider-console host fingerprint.
+Actual SSH authentication/inventory still awaits the environment-secret step.

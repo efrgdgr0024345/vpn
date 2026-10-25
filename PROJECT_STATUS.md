@@ -145,7 +145,7 @@ The same 109-test suite, Tk startup/closure and real nftables check also passed 
 a disposable Ubuntu 22.04 container. The implementation and CI workflow were
 committed as `d973f339a8764c234ca5d7bdccf0124250354cc0` and pushed to
 `test/isolated-vpn-validation`; a remote-ref read confirmed publication. Remote
-`main` remains at the initial README-only commit. GitHub-hosted results were then
+At that point `main` remained at the initial README-only commit. GitHub-hosted results were then
 verified through the API: [run 40162859451](https://github.com/efrgdgr0024345/vpn/actions/runs/40162859451)
 completed successfully for commit `b76990ce3855906d4f7bd87f28d72fefe935d4dc`.
 Both Ubuntu 22.04 and 24.04 jobs report successful source checks, unit/security
@@ -158,12 +158,12 @@ been created, no cloud charges incurred by this task, and no production SSH
 connection established. The user supplied provider-console output confirming
 Debian 13, SSH listening on port 22, and successful addition of the temporary
 public key on a separate disposable lab droplet. Its host-key fingerprint was
-supplied out of band, but a network scan has not reached that host, so no scanned
-host key has been compared or SSH authentication attempted. Publishing recreated
+supplied out of band. Before the GitHub-runner route, no network scan had reached
+that host and no scanned key had been compared or authentication attempted. Publishing recreated
 the runtime without the corresponding private key formerly stored in `/tmp`.
 That old authorized key should be removed during the next console setup step.
 Direct SSH is still refused after the network change; its precise refusal source
-is not established. GitHub-runner SSH administration is not configured or tested.
+is not established. GitHub-runner reachability was verified in the follow-up below.
 See TESTING.md for the separate client/server test stages.
 
 The user initially chose clean Ubuntu for the new design, then selected an
@@ -193,6 +193,20 @@ and save its dedicated private key directly as the environment secret
 secret material to the assistant. Default-branch publication and actual lab
 reachability are recorded below as confirmed; initial admin operations do not
 install or remove server software.
+
+The new code was committed as `079352437bf67678705cb1ae77721fedf0546910`.
+[GitHub run 40166128639](https://github.com/efrgdgr0024345/vpn/actions/runs/40166128639)
+passed both Ubuntu client/security jobs (109 existing plus 12 new unit tests)
+and the real Debian 13 SSH integration job. The tested branch was then published
+to default `main` with a fast-forward push so manual dispatch is available.
+
+[Lab connectivity run 40166246400](https://github.com/efrgdgr0024345/vpn/actions/runs/40166246400)
+successfully reached the disposable droplet from a GitHub runner and verified
+the independently supplied ED25519 fingerprint. The `inventory` job was skipped
+as intended for that connectivity-only run. SSH authentication and server
+inventory still await the owner's environment-secret/bootstrap step. No private
+key or actual endpoint address was added to source, and no VPN configuration,
+firewall or server data has been changed by the assistant.
 
 ## Recovery actions after isolated testing
 
