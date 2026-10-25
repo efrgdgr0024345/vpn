@@ -1,0 +1,63 @@
+VPN DESK — OFFLINE RECOVERY
+===========================
+Run the GUI as your ordinary desktop user. Privileged actions require the installed
+root-owned helper and protected /etc/vpn-desk configuration. Do not sudo scripts
+from the checkout or use a home-directory profile to bypass a refusal.
+
+If networking stops, leave your fail-closed firewall enabled. Do not flush rules,
+disable nftables, overwrite DNS, or start repeated VPN copies. Return to the
+terminal that started your session; Ctrl+C stops it. Wait for OpenVPN to exit.
+If the terminal is lost, inspect process ownership locally before taking action;
+never kill a guessed PID or service. The app does not kill unknown processes.
+
+LOCAL READ-ONLY CHECKS (output may contain identifying information):
+  date -Is
+  ip -brief link
+  ip -4 route show
+  ip -6 route show
+  nmcli -f GENERAL.DEVICE,IP4.DNS,IP6.DNS device show
+  ps -C openvpn -o pid,ppid,user,comm
+  systemctl is-active nftables
+Privileged read-only inspection in your own terminal:
+  sudo nft list ruleset
+Do not paste raw profiles, keys, rulesets or network details publicly. Service
+state or tun0 presence does not prove the effective policy or VPN health.
+
+SUPPORTED PRIVILEGED ENTRY POINT:
+  sudo -- /usr/bin/python3 -I -B /usr/local/libexec/vpn-desk/privileged.py connect
+  sudo -- /usr/bin/python3 -I -B /usr/local/libexec/vpn-desk/privileged.py portal-status
+  sudo -- /usr/bin/python3 -I -B /usr/local/libexec/vpn-desk/privileged.py portal-close
+Only installed /etc/vpn-desk/client.ovpn is accepted, root-owned with mode 0600.
+A refusal means stop and inspect; INSTALL.md explains the policy and prerequisites.
+No unsafe fallback to a home-directory profile is provided.
+
+CAPTIVE PORTALS:
+Opening is disabled; the former all-application direct IPv4 window was removed.
+Close/status support only a recognized object under the hardened baseline.
+An old or unknown firewall layout is not automatically migrated or repaired.
+If an old window may remain, keep the machine awake; its original kernel timeout
+requires awake time and is not a wall-clock guarantee across suspend. Have an
+administrator inspect and safely close/migrate that state before connecting.
+Do not restore the old broad portal helper or bypass its checks.
+
+TLS/AUTH/DNS:
+Inspect errors in your session terminal. Do not disable certificate verification
+or change trusted CA/server identity just to suppress an error. Check local time,
+provider credentials and administrator-installed profile/policy consistency.
+The supported profile rejects external files, scripts/plugins and management.
+DNS is administered separately; a blocked resolver is not fixed by granting
+all-app direct Wi-Fi access. Actual server verification, DNS/IPv6 leaks and
+boot/resume behavior need controlled host validation.
+
+PRIVACY:
+Local username/host are local OS identity, not VPN/server identity. Diagnostics
+are constructed, redacted summaries. Raw connection exports require a toggle and
+confirmation. Saved exports are atomic owner-only 0600 files. Review before sharing.
+Clipboard managers may keep copied content. Connections shows snapshots in this
+network namespace, not packet payloads or complete traffic/security coverage.
+
+START WITHOUT NETWORK ACCESS:
+  cd /path/to/vpn-dashboard
+  python3 app.py
+Requires Python 3.10+, Tkinter and a graphical Linux desktop. If unavailable, read
+this file or INSTALL.md locally. No pip installation is needed for the app.

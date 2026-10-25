@@ -1,0 +1,8 @@
+{
+  "wifi_interface": "wlan0",
+  "vpn_server_ipv4": "192.0.2.10",
+  "vpn_port": 1194,
+  "vpn_protocol": "udp",
+  "dhcp_server_ipv4": "192.0.2.1",
+  "server_name": "vpn.example.invalid"
+}

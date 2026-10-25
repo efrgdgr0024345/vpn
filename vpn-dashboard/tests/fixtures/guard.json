@@ -1,0 +1,49 @@
+{
+  "nftables": [
+    {"table": {"family": "inet", "name": "vpn_guard"}},
+    {"chain": {"family": "inet", "table": "vpn_guard", "name": "input", "type": "filter", "hook": "input", "prio": 0, "policy": "drop"}},
+    {"chain": {"family": "inet", "table": "vpn_guard", "name": "output", "type": "filter", "hook": "output", "prio": 0, "policy": "drop"}},
+    {"chain": {"family": "inet", "table": "vpn_guard", "name": "forward", "type": "filter", "hook": "forward", "prio": 0, "policy": "drop"}},
+    {"rule": {"family": "inet", "table": "vpn_guard", "chain": "input", "expr": [
+      {"match": {"op": "==", "left": {"meta": {"key": "iifname"}}, "right": "lo"}},
+      {"accept": null}
+    ]}},
+    {"rule": {"family": "inet", "table": "vpn_guard", "chain": "input", "expr": [
+      {"match": {"op": "in", "left": {"ct": {"key": "state"}}, "right": {"set": ["established", "related"]}}},
+      {"accept": null}
+    ]}},
+    {"rule": {"family": "inet", "table": "vpn_guard", "chain": "input", "expr": [
+      {"match": {"op": "==", "left": {"meta": {"key": "iifname"}}, "right": "wlan0"}},
+      {"match": {"op": "==", "left": {"meta": {"key": "nfproto"}}, "right": "ipv4"}},
+      {"match": {"op": "==", "left": {"payload": {"protocol": "ip", "field": "saddr"}}, "right": "192.0.2.1"}},
+      {"match": {"op": "==", "left": {"payload": {"protocol": "udp", "field": "sport"}}, "right": 67}},
+      {"match": {"op": "==", "left": {"payload": {"protocol": "udp", "field": "dport"}}, "right": 68}},
+      {"accept": null}
+    ]}},
+    {"rule": {"family": "inet", "table": "vpn_guard", "chain": "output", "expr": [
+      {"match": {"op": "==", "left": {"meta": {"key": "oifname"}}, "right": "lo"}},
+      {"accept": null}
+    ]}},
+    {"rule": {"family": "inet", "table": "vpn_guard", "chain": "output", "expr": [
+      {"match": {"op": "==", "left": {"meta": {"key": "oifname"}}, "right": "tun0"}},
+      {"accept": null}
+    ]}},
+    {"rule": {"family": "inet", "table": "vpn_guard", "chain": "output", "expr": [
+      {"match": {"op": "==", "left": {"meta": {"key": "oifname"}}, "right": "wlan0"}},
+      {"match": {"op": "==", "left": {"meta": {"key": "nfproto"}}, "right": "ipv4"}},
+      {"match": {"op": "==", "left": {"meta": {"key": "skuid"}}, "right": {"set": [0, 995]}}},
+      {"match": {"op": "==", "left": {"payload": {"protocol": "ip", "field": "daddr"}}, "right": "192.0.2.10"}},
+      {"match": {"op": "==", "left": {"payload": {"protocol": "udp", "field": "dport"}}, "right": 1194}},
+      {"accept": null}
+    ]}},
+    {"rule": {"family": "inet", "table": "vpn_guard", "chain": "output", "expr": [
+      {"match": {"op": "==", "left": {"meta": {"key": "oifname"}}, "right": "wlan0"}},
+      {"match": {"op": "==", "left": {"meta": {"key": "nfproto"}}, "right": "ipv4"}},
+      {"match": {"op": "==", "left": {"meta": {"key": "skuid"}}, "right": 0}},
+      {"match": {"op": "==", "left": {"payload": {"protocol": "ip", "field": "daddr"}}, "right": {"set": ["255.255.255.255", "192.0.2.1"]}}},
+      {"match": {"op": "==", "left": {"payload": {"protocol": "udp", "field": "sport"}}, "right": 68}},
+      {"match": {"op": "==", "left": {"payload": {"protocol": "udp", "field": "dport"}}, "right": 67}},
+      {"accept": null}
+    ]}}
+  ]
+}

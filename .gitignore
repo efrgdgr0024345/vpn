@@ -1,0 +1,30 @@
+# Python-generated files and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Local credentials and VPN material; never force-add these files.
+.env
+.env.*
+!.env.example
+*.ovpn
+*.conf
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+auth.txt
+credentials*
+secrets*
+
+# User-requested diagnostic exports and imported archives
+vpn-diagnostics-*.txt
+connections-*.txt
+*.log
+*.zip
+policy.local.json
+vpn-guard.local.json
