@@ -46,9 +46,26 @@ jobs:
           VPN_LAB_PORT: ${{ inputs.port }}
         run: /usr/bin/python3 -I -B ci/lab_admin.py connectivity
 
-  administration:
+  verified-build:
     needs: connectivity
-    if: inputs.operation != 'connectivity' && github.repository == 'efrgdgr0024345/vpn' && github.ref == 'refs/heads/main'
+    if: inputs.operation == 'install-foundation'
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Require successful CI for this deployment commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: /usr/bin/python3 -I -B ci/require_checks.py
+
+  administration:
+    needs: [connectivity, verified-build]
+    if: always() && !cancelled() && needs.connectivity.result == 'success' && (needs.verified-build.result == 'success' || needs.verified-build.result == 'skipped') && inputs.operation != 'connectivity' && github.repository == 'efrgdgr0024345/vpn' && github.ref == 'refs/heads/main'
     environment: vpn-lab
     runs-on: ubuntu-24.04
     timeout-minutes: 30

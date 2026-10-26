@@ -1,0 +1,31 @@
+{
+  "environment": "vpn-lab",
+  "stage": "single-account OpenVPN foundation",
+  "deployed_source_commit": "f1c6e7175d8a993df53b65c63f814eb7aebf9eae",
+  "os": "Debian 13",
+  "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40273060571",
+  "live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40273149219",
+  "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40273151402",
+  "validated": [
+    "VPN service active",
+    "one obsolete self-hosted runner service retired",
+    "correct certificate/password login",
+    "wrong password rejected",
+    "DNS roundtrip through encrypted VPN and NAT",
+    "private-network and cloud-metadata packet dropped",
+    "IPv6 block response",
+    "second login rejected without displacing active session",
+    "external UDP 1194 reaches the server"
+  ],
+  "not_yet_validated": [
+    "physical Kali client and resolver integration",
+    "client kill switch and physical-interface leak testing",
+    "reboot recovery"
+  ],
+  "not_yet_implemented": [
+    "restricted bootstrap authorization broker",
+    "registered-device grant redemption",
+    "automated staged credential handoff"
+  ],
+  "private_material": "Retained on the server; no keys, passwords or real profiles in this record."
+}

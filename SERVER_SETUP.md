@@ -9,6 +9,10 @@ OpenVPN Community and distribution packages, not Access Server.
 Use the manual `Lab server administration` workflow on `main`, with the `vpn-lab`
 environment and pinned provider-console host fingerprint:
 
+Installation additionally requires a successful push-CI run for the exact
+deployment commit. Missing, failed or unverifiable CI status blocks installation
+before the SSH secret is supplied to the administration job.
+
 | Operation | Effect |
 | --- | --- |
 | `inventory` | Approved read-only OS, ports, services and firewall summary. |

@@ -208,8 +208,6 @@ inventory still await the owner's environment-secret/bootstrap step. No private
 key or actual endpoint address was added to source, and no VPN configuration,
 firewall or server data has been changed by the assistant.
 
-## Recovery actions after isolated testing
-
 ## Disposable Debian server foundation work
 
 The user explicitly authorized removing the lab's old services and asked that
@@ -238,9 +236,36 @@ an identified original ZIP author/repository-wide license. Private keys,
 passwords and real exported profiles stay out of source and CI artifacts.
 
 GitHub-hosted validation, actual installation and live server checks are
-recorded below as they complete. This milestone is conventional OpenVPN; the
+recorded below. This milestone is conventional OpenVPN; the
 staged authorization broker is still unimplemented. SERVER_SETUP.md records
 test limits, recovery and private client-profile locations.
+
+The foundation passed [four GitHub CI jobs](https://github.com/efrgdgr0024345/vpn/actions/runs/40272577803)
+before the initial installation attempt. That attempt stopped during legacy
+runner-unit cleanup. Unit-entry handling was corrected without following or
+reading an old symlink target, with a regression covering safe removal. Both
+subsequent CI runs for the corrected commit passed.
+
+Actual [installation run 40273060571](https://github.com/efrgdgr0024345/vpn/actions/runs/40273060571)
+then succeeded for commit `f1c6e7175d8a993df53b65c63f814eb7aebf9eae`.
+The returned report confirms the service is active, one old runner service was
+retired, maximum clients is one, and certificate plus PAM password is required.
+The working Access Server was not touched.
+
+The [live packet self-test](https://github.com/efrgdgr0024345/vpn/actions/runs/40273149219)
+passed all checks: correct/incorrect password behavior, encrypted DNS through
+NAT, metadata/private-network drop, IPv6 block response and a second login not
+displacing the active session. Private credentials stayed on the droplet.
+The [external UDP probe](https://github.com/efrgdgr0024345/vpn/actions/runs/40273151402)
+also confirmed that a runner-originated nonce reached the server's UDP 1194
+interface. This is distinct from a full external-client TLS handshake.
+
+`deployments/vpn-lab.json` records these sanitized results and the remaining
+physical-client/reboot tests. The install workflow now has an additional gate
+requiring successful push-CI for the exact deployment commit before accessing
+its SSH secret. There are 23 lab/safeguard/gate unit tests plus 109 desktop tests.
+The new gate's GitHub validation is recorded when complete. No staged broker,
+new OS or custom cryptography is claimed implemented.
 
 ## Original Access Server recovery reference
 
