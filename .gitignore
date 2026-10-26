@@ -17,6 +17,12 @@ venv/
 *.pfx
 *.crt
 *.cer
+id_ed25519
+id_ed25519.pub
+id_rsa
+id_rsa.pub
+.vpn-lab-actions/
+login.txt
 auth.txt
 credentials*
 secrets*

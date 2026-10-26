@@ -210,6 +210,40 @@ firewall or server data has been changed by the assistant.
 
 ## Recovery actions after isolated testing
 
+## Disposable Debian server foundation work
+
+The user explicitly authorized removing the lab's old services and asked that
+implementation and third-party attribution be kept in GitHub. A successful
+SSH inventory run confirmed Debian 13, roughly 70 GB free, no OpenVPN, and an
+old self-hosted runner service for another project. The working Access Server
+is not this lab droplet. The first secret omitted private-key envelope lines;
+after the owner corrected it, actual SSH inventory succeeded.
+
+Approved inventory is now published as a bounded check notice because signed
+log-download hosts are unavailable from the controller. This avoids another
+network-settings change; no credential material is included in the report.
+
+The foundation installer, native service/firewall/PAM/PKI generators, local
+packet self-test and isolated container harness are implemented in `ops/` and
+`ci/`. There are 109 existing desktop tests and 19 lab/safeguard tests. Local
+real OpenVPN integration now passes correct/incorrect credentials, encrypted
+IPv4 DNS/NAT, private/cloud-metadata denial, client IPv6 blocking, a second login
+not displacing the active one, and reruns preserving existing credentials.
+
+Real tests caught and fixed Debian's duplicate compatibility/canonical PAM
+plugin paths and an Easy-RSA CN environment override. Explicit certificate
+identity checks and a CN-scoping regression prevent those issues recurring.
+THIRD_PARTY_NOTICES.md credits the upstream projects and records the absence of
+an identified original ZIP author/repository-wide license. Private keys,
+passwords and real exported profiles stay out of source and CI artifacts.
+
+GitHub-hosted validation, actual installation and live server checks are
+recorded below as they complete. This milestone is conventional OpenVPN; the
+staged authorization broker is still unimplemented. SERVER_SETUP.md records
+test limits, recovery and private client-profile locations.
+
+## Original Access Server recovery reference
+
 Keep the existing root recovery console open. Inspect Access Server's current
 authentication backend and selected account status, then reset the account using
 the corresponding supported mechanism. Keep new credentials out of chat, logs,

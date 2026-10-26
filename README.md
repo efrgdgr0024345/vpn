@@ -1,9 +1,15 @@
-# VPN Desk
+# VPN lab and VPN Desk
 
-Current project state and conversation reconciliation are in
-[PROJECT_STATUS.md](PROJECT_STATUS.md). The code is a desktop-client prototype;
-it has not been deployed to the VPS by this task. Current work is isolated
-testing while the existing OpenVPN Access Server remains in use.
+This project contains a Debian 13 OpenVPN lab managed through GitHub Actions and
+a Linux desktop-client prototype. The working Access Server stays separate.
+See [server setup](SERVER_SETUP.md), [workflow administration](GITHUB_LAB.md),
+[third-party notices](THIRD_PARTY_NOTICES.md) and
+[current evidence/status](PROJECT_STATUS.md).
+
+The lab foundation provides one certificate-and-password VPN account, a
+single-session limit, modern TLS and default-drop forwarding rules. The
+restricted bootstrap broker and automated handoff remain a separate stage in
+[the design proposal](NEW_VPN_DESIGN.md).
 
 A local Linux desktop dashboard for read-only network diagnostics and explicit
 terminal-authenticated OpenVPN startup. The application is in
@@ -37,7 +43,9 @@ has no production deployment or production credentials.
 
 [GitHub lab administration](GITHUB_LAB.md) describes the separate manual SSH
 connectivity/inventory workflow and its dedicated, expiring lab key. This does
-not yet install a VPN server or implement the staged-login proposal.
+include a [Debian 13 server foundation](SERVER_SETUP.md). The staged-login broker
+remains a separate implementation stage. Third-party attribution is recorded in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 The proposed next system is described in [NEW_VPN_DESIGN.md](NEW_VPN_DESIGN.md).
 That architecture is a design proposal; it is not implemented by this installer.

@@ -9,6 +9,9 @@ import re
 import subprocess
 import sys
 import tempfile
+import socket
+import threading
+import secrets
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'vpn-dashboard'))
@@ -77,6 +80,33 @@ report = {'os':release, 'kernel':platform.release(), 'root_free_bytes':disk.free
 print(json.dumps(report, sort_keys=True))
 '''
 
+UDP_PROBE = r'''
+import json, socket, subprocess, time
+routes=json.loads(subprocess.check_output(['/usr/sbin/ip','-j','-4','route','show','default'],text=True))
+if len(routes)!=1:
+    raise SystemExit('Expected one external interface.')
+found=False
+with socket.socket(socket.AF_PACKET,socket.SOCK_RAW,socket.htons(0x0800)) as channel:
+    channel.bind((routes[0]['dev'],0))
+    channel.settimeout(.5)
+    end=time.monotonic()+10
+    while time.monotonic()<end:
+        try:
+            packet,address=channel.recvfrom(4096)
+        except socket.timeout:
+            continue
+        if address[2]==socket.PACKET_OUTGOING or len(packet)<42 or packet[12:14]!=b'\x08\x00' or packet[23]!=17:
+            continue
+        offset=14+(packet[14]&15)*4
+        if len(packet)>=offset+8 and packet[offset+2:offset+4]==b'\x04\xaa' and packet[offset+8:]==PROBE:
+            found=True
+            break
+if not found:
+    print(json.dumps({'error':'selftest_failed','detail':'Public UDP 1194 did not reach the server.'}))
+    raise SystemExit(1)
+print(json.dumps({'public_udp_1194_received':True}))
+'''
+
 
 class LabError(RuntimeError):
     pass
@@ -135,13 +165,35 @@ def private_file(path, contents):
 
 
 def execute(operation, environment, run=bounded_run):
-    if operation not in ('connectivity', 'inventory'):
+    if operation not in ('connectivity', 'inventory', 'install-foundation', 'test-foundation','probe-udp'):
         raise LabError('Unsupported lab operation.')
     host, port, fingerprint = settings(environment)
     known = verified_host(host, port, fingerprint, run)
     print('SSH host identity verified against the provider-console fingerprint.')
     if operation == 'connectivity':
         return
+    program=INVENTORY
+    remote_command='/usr/bin/python3 -I -B -'
+    timeout=65
+    probe=None
+    if operation=='probe-udp':
+        probe=b'VPN-LAB-PROBE-v1:'+secrets.token_hex(16).encode()
+        program='PROBE = '+repr(probe)+'\n'+UDP_PROBE
+    if operation=='install-foundation':
+        selftest=(ROOT/'ops/server_selftest.py').read_text()
+        notices=(ROOT/'THIRD_PARTY_NOTICES.md').read_text()
+        revision=environment.get('GITHUB_SHA','local-test')
+        if revision!='local-test' and not re.fullmatch(r'[0-9a-f]{40}',revision):
+            raise LabError('Invalid deployment revision.')
+        program=('SELFTEST_SOURCE = '+repr(selftest)+'\nNOTICES_SOURCE = '+repr(notices)
+                 +'\nDEPLOYED_REVISION = '+repr(revision)+'\n'
+                 +(ROOT/'ops/server_foundation.py').read_text())
+        # Both values are validated numeric/literal-IP strings, never shell input.
+        remote_command+=' --endpoint '+host+' --ssh-port '+port
+        timeout=1500
+    elif operation=='test-foundation':
+        program=(ROOT/'ops/server_selftest.py').read_text()
+        timeout=130
     secret = environment.get('VPN_LAB_SSH_PRIVATE_KEY', '').strip().replace('\r\n', '\n')
     if (len(secret) > 16384 or not secret.startswith('-----BEGIN OPENSSH PRIVATE KEY-----\n')
             or not secret.endswith('\n-----END OPENSSH PRIVATE KEY-----')):
@@ -150,23 +202,62 @@ def execute(operation, environment, run=bounded_run):
         key, hosts = Path(directory) / 'identity', Path(directory) / 'known_hosts'
         private_file(key, secret + '\n')
         private_file(hosts, known)
-        result = run([
+        sender_done=threading.Event()
+        def send_probe():
+            with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as channel:
+                for _ in range(20):
+                    if sender_done.wait(.5):
+                        return
+                    try:
+                        channel.sendto(probe,(host,1194))
+                    except OSError:
+                        return
+        sender=threading.Thread(target=send_probe,daemon=True) if probe else None
+        if sender:
+            sender.start()
+        try:
+            result = run([
             '/usr/bin/ssh', '-F', '/dev/null', '-T', '-p', port, '-i', str(key),
             '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
             '-o', 'StrictHostKeyChecking=yes', '-o', 'UserKnownHostsFile=' + str(hosts),
             '-o', 'GlobalKnownHostsFile=/dev/null', '-o', 'ConnectTimeout=10',
             '-o', 'ConnectionAttempts=1', '-o', 'ForwardAgent=no',
+            '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=8',
             '-o', 'ClearAllForwardings=yes', '-o', 'LogLevel=ERROR',
-            'root@' + host, '/usr/bin/python3 -I -B -'],
-            input=INVENTORY, timeout=65, limit=131072, env=ENVIRONMENT)
+            'root@' + host, remote_command],
+                input=program, timeout=timeout, limit=131072, env=ENVIRONMENT)
+        finally:
+            sender_done.set()
+            if sender:
+                sender.join(timeout=1)
         if result.returncode:
-            raise LabError('SSH inventory failed. Check key authorization/expiry and environment-secret setup; raw stderr withheld.')
+            try:
+                failure=json.loads(result.stdout)
+            except ValueError:
+                failure={}
+            if (isinstance(failure,dict) and set(failure)=={'error','detail'}
+                    and failure['error'] in ('setup_failed','selftest_failed')
+                    and isinstance(failure['detail'],str)
+                    and re.fullmatch(r'[A-Za-z0-9 ,/_.()-]{1,180}',failure['detail'])):
+                raise LabError('Lab operation failed: '+failure['detail'])
+            raise LabError('SSH '+operation+' failed. Check key authorization/expiry and environment-secret setup; raw stderr withheld.')
         try:
             report = json.loads(result.stdout)
         except ValueError:
             raise LabError('Inventory returned unsupported output; raw output withheld.') from None
         expected = {'os', 'kernel', 'root_free_bytes', 'running_service_units', 'listening_ports',
                     'candidate_vpn_subnet_overlaps_existing_route', 'firewall_summary', 'tools'}
+        if operation=='install-foundation':
+            expected={'version','server_service_active','vpn_udp_port','recovery_ssh_port','max_clients',
+                      'required_factors','retired_runner_services','client_profile','credential_file',
+                      'staged_login_implemented','source_commit'}
+        elif operation=='test-foundation':
+            expected={'correct_credentials_connect','wrong_password_rejected',
+                      'ipv4_dns_roundtrip_through_vpn_and_nat','metadata_private_network_packet_dropped',
+                      'client_ipv6_block_response_observed','second_connection_rejected_without_displacing_first',
+                      'host_routes_and_resolver_modified','credentials_exported'}
+        elif operation=='probe-udp':
+            expected={'public_udp_1194_received'}
         if not isinstance(report, dict) or set(report) != expected:
             raise LabError('Inventory returned unexpected fields; raw output withheld.')
         if environment.get('GITHUB_ACTIONS') == 'true':
@@ -177,9 +268,10 @@ def execute(operation, environment, run=bounded_run):
             if len(message.encode('utf-8')) > 60000:
                 raise LabError('Inventory exceeds the check-report size limit; raw output withheld.')
             message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
-            print('::notice title=VPN lab inventory::' + message)
+            title='VPN lab inventory' if operation=='inventory' else 'VPN lab '+operation
+            print('::notice title='+title+'::' + message)
         print(json.dumps(report, indent=2, sort_keys=True))
-    print('Read-only inventory completed. No server settings changed; runner key file removed.')
+    print('Lab '+operation+' completed; runner key file removed.')
 
 
 def main():
@@ -196,5 +288,9 @@ if __name__ == '__main__':
     try:
         main()
     except (LabError, OSError, UnicodeError, subprocess.SubprocessError) as exc:
-        print(str(exc) if isinstance(exc, LabError) else 'Lab command failed or exceeded its time/output limit.', file=sys.stderr)
+        message=str(exc) if isinstance(exc, LabError) else 'Lab command failed or exceeded its time/output limit.'
+        if os.environ.get('GITHUB_ACTIONS')=='true':
+            escaped=message.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+            print('::error title=VPN lab operation failed::'+escaped,flush=True)
+        print(message,file=sys.stderr)
         raise SystemExit(1)

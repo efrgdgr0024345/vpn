@@ -9,10 +9,13 @@ lab droplet. The working Access Server is outside this workflow's scope.
 | --- | --- |
 | `connectivity` | Reach SSH and compare its ED25519 key with the independently supplied provider-console fingerprint. No authentication or private key needed. |
 | `inventory` | Repeat identity verification, then run a fixed read-only Python inventory as root using the lab environment's dedicated SSH key. |
+| `install-foundation` | Provision the disposable Debian 13 OpenVPN foundation, replacing its firewall and retiring old runner services. |
+| `test-foundation` | Test the running VPN locally without exporting its credentials or changing host routes/DNS. |
+| `probe-udp` | Send a random non-secret UDP probe from the GitHub runner and observe its arrival on the lab's external interface. No VPN credentials are exported. |
 
-There is no arbitrary command input, server installation, firewall change or
-automatic production deployment. VPN installation and staged login remain
-subsequent work after successful access and inventory.
+There is no arbitrary command input or automatic production deployment.
+SERVER_SETUP.md documents the explicitly selected installation/test operations.
+The staged-login broker remains subsequent work.
 
 ## One-time GitHub environment setup
 

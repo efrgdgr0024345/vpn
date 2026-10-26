@@ -4,8 +4,9 @@ Status: design proposal, not an implemented or deployed VPN server. This documen
 captures the critical review and a recommended starting architecture. The current
 desktop prototype and its installer remain separate from this proposed system.
 Custom bootloader work is deferred.
-New feature development is paused while the existing Access Server VPN is
-recovered. See PROJECT_STATUS.md for the reconciled implementation/deployment state.
+Lab development now includes the conventional single-account OpenVPN foundation
+in SERVER_SETUP.md. The authorization broker and handoff described here remain
+unimplemented. See PROJECT_STATUS.md for deployment and validation evidence.
 
 ## The goal
 

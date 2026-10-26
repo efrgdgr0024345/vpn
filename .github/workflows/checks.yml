@@ -63,3 +63,14 @@ jobs:
           persist-credentials: false
       - name: Exercise actual OpenSSH without production credentials
         run: sh ci/test_ssh_container.sh
+
+  vpn-integration:
+    name: Real VPN foundation (Debian 13)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Test real certificates, PAM, OpenVPN, firewall and packet forwarding
+        run: sh ci/test_server_container.sh

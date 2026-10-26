@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Read-only lab operation
+        description: Lab operation (install-foundation changes the disposable server)
         type: choice
-        options: [connectivity, inventory]
+        options: [connectivity, inventory, install-foundation, test-foundation, probe-udp]
         default: connectivity
       host:
         description: Disposable lab server IPv4 address (public workflow input)
@@ -46,20 +46,21 @@ jobs:
           VPN_LAB_PORT: ${{ inputs.port }}
         run: /usr/bin/python3 -I -B ci/lab_admin.py connectivity
 
-  inventory:
+  administration:
     needs: connectivity
-    if: inputs.operation == 'inventory' && github.repository == 'efrgdgr0024345/vpn' && github.ref == 'refs/heads/main'
+    if: inputs.operation != 'connectivity' && github.repository == 'efrgdgr0024345/vpn' && github.ref == 'refs/heads/main'
     environment: vpn-lab
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
-      - name: Read approved lab inventory over verified SSH
+      - name: Run the fixed lab operation over verified SSH
         env:
           VPN_LAB_HOST: ${{ inputs.host }}
           VPN_LAB_HOST_FINGERPRINT: ${{ inputs.host_fingerprint }}
           VPN_LAB_PORT: ${{ inputs.port }}
           VPN_LAB_SSH_PRIVATE_KEY: ${{ secrets.VPN_LAB_SSH_PRIVATE_KEY }}
-        run: /usr/bin/python3 -I -B ci/lab_admin.py inventory
+          VPN_LAB_OPERATION: ${{ inputs.operation }}
+        run: /usr/bin/python3 -I -B ci/lab_admin.py "$VPN_LAB_OPERATION"
