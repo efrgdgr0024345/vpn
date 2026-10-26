@@ -1,11 +1,13 @@
 {
   "environment": "vpn-lab",
   "stage": "single-account OpenVPN foundation",
-  "deployed_source_commit": "f1c6e7175d8a993df53b65c63f814eb7aebf9eae",
+  "deployed_source_commit": "81aa80f0f60adafa91e0613fb87e62fe25fbe437",
   "os": "Debian 13",
-  "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40273060571",
-  "live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40273149219",
+  "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40276817573",
+  "live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40277258126",
   "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40273151402",
+  "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40276816860",
+  "client_transfer": "Chrooted read-only SFTP helper tested; owner public-key enrollment pending.",
   "validated": [
     "VPN service active",
     "one obsolete self-hosted runner service retired",

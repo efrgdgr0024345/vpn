@@ -292,6 +292,23 @@ settings intact. The root-owned protected installer library is installed by the
 foundation workflow for this helper's guarded import path. No new public key
 is enrolled until supplied by the owner.
 
+The final credential-handling hardening disables core dumps in the controller,
+installer, self-test and download helper. Commit
+`81aa80f0f60adafa91e0613fb87e62fe25fbe437` passed all four GitHub CI jobs,
+including 135 unit tests per Ubuntu job and real Debian SSH/SFTP and VPN packet
+integration. [Gated deployment 40276817573](https://github.com/efrgdgr0024345/vpn/actions/runs/40276817573)
+then succeeded: connectivity, matching-commit CI verification and administration
+all passed. The installer rerun preserved credentials and reused the existing
+PKI; the protected helper library is now installed on the server.
+
+[Live test 40277258126](https://github.com/efrgdgr0024345/vpn/actions/runs/40277258126)
+passed the full packet/authentication checks again after that deployment.
+Post-install inventory confirmed the VPN service active, the old runner absent
+from running services, and two firewall tables with default-drop input and
+forward chains. No physical Kali connection or reboot test is claimed.
+The next external prerequisite is the owner's Kali ED25519 public key for
+temporary private file transfer; the corresponding private key stays on Kali.
+
 ## Original Access Server recovery reference
 
 Keep the existing root recovery console open. Inspect Access Server's current
