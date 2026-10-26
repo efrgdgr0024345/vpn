@@ -3,6 +3,7 @@ from pathlib import Path
 import socket
 import struct
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -12,6 +13,19 @@ import server_selftest as probe
 
 
 class FoundationTests(unittest.TestCase):
+    def test_old_runner_unit_symlink_is_removed_without_following_its_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original=Path(directory)/'keep'
+            original.write_text('KEEP')
+            unit=Path(directory)/'runner.service'
+            unit.symlink_to(original)
+            server.remove_runner_unit(unit)
+            self.assertFalse(unit.is_symlink())
+            self.assertEqual(original.read_text(),'KEEP')
+            server.remove_runner_unit(unit)
+            with self.assertRaises(server.SetupError):
+                server.remove_runner_unit(Path(directory))
+
     def test_ca_common_name_cannot_override_server_or_client_certificate_identity(self):
         with patch.object(server,'run',return_value='') as run:
             server.easyrsa('build-ca','nopass')

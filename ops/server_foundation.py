@@ -240,6 +240,7 @@ def easyrsa(*arguments):
 
 
 def retire_old_runners():
+    global STAGE
     names = run(['/usr/bin/systemctl','list-unit-files','--type=service','--no-legend',
                  '--no-pager','actions.runner.*.service'])
     count = 0
@@ -250,12 +251,16 @@ def retire_old_runners():
             raise SetupError('Unexpected runner service name.')
         if len(fields)>1 and fields[1]=='masked':
             continue
+        STAGE='old runner inspection'
         work=run(['/usr/bin/systemctl','show','--property=WorkingDirectory','--value',unit]).strip()
         # Stop every process in the old runner cgroup, including worker children.
         subprocess.run(['/usr/bin/systemctl','kill','--kill-whom=all','--signal=SIGTERM',unit],
                        stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15,env=ENV)
+        STAGE='old runner stop'
         run(['/usr/bin/systemctl','stop',unit])
+        STAGE='old runner disable'
         run(['/usr/bin/systemctl','disable',unit])
+        STAGE='old runner registration cleanup'
         path=Path(work)
         if path.is_absolute() and len(path.parts)>=3:
             safe=True
@@ -281,13 +286,25 @@ def retire_old_runners():
                         target.unlink()
         # mask cannot replace a regular unit file in /etc/systemd/system.
         source = Path('/etc/systemd/system')/unit
-        if source.exists() and not source.is_symlink():
-            read_owned(source)
-            source.unlink()
+        STAGE='old runner unit cleanup'
+        remove_runner_unit(source)
         run(['/usr/bin/systemctl','daemon-reload'])
+        STAGE='old runner mask'
         run(['/usr/bin/systemctl','mask',unit])
         count += 1
     return count
+
+
+def remove_runner_unit(path):
+    try:
+        info=path.lstat()
+    except FileNotFoundError:
+        return
+    if not (stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode)):
+        raise SetupError('Unexpected old runner unit file type.')
+    # Deleting the directory entry never follows its target. Its controlled
+    # /etc/systemd/system parent is trusted; old file content need not be read.
+    path.unlink()
 
 
 def deny_vpn_accounts_ssh():
