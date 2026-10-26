@@ -69,7 +69,7 @@ jobs:
 
   administration:
     needs: [connectivity, verified-build]
-    if: always() && !cancelled() && needs.connectivity.result == 'success' && (needs.verified-build.result == 'success' || needs.verified-build.result == 'skipped') && inputs.operation != 'connectivity' && github.repository == 'efrgdgr0024345/vpn' && github.ref == 'refs/heads/main'
+    if: always() && !cancelled() && needs.connectivity.result == 'success' && (needs['verified-build'].result == 'success' || needs['verified-build'].result == 'skipped') && inputs.operation != 'connectivity' && github.repository == 'efrgdgr0024345/vpn' && github.ref == 'refs/heads/main'
     environment: vpn-lab
     runs-on: ubuntu-24.04
     timeout-minutes: 30

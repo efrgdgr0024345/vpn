@@ -285,6 +285,13 @@ access. There are now 26 lab/gate/download unit tests plus 109 desktop tests.
 Production/lab download enrollment awaits the owner's public key; no claim is
 made that a physical Kali VPN connection has been tested.
 
+Download setup and closure also require the matching-commit CI gate. The helper
+disables other SSH key providers and trusted user CAs for the download account,
+validates effective sshd settings before reloading, and keeps administrative
+settings intact. The root-owned protected installer library is installed by the
+foundation workflow for this helper's guarded import path. No new public key
+is enrolled until supplied by the owner.
+
 ## Original Access Server recovery reference
 
 Keep the existing root recovery console open. Inspect Access Server's current
