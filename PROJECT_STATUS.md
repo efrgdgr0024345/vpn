@@ -267,6 +267,24 @@ its SSH secret. There are 23 lab/safeguard/gate unit tests plus 109 desktop test
 The new gate's GitHub validation is recorded when complete. No staged broker,
 new OS or custom cryptography is claimed implemented.
 
+The controller/check-gate commit `6994457ff1221a07da2e98bc2db56dbec33ea535`
+passed all four GitHub CI jobs. Post-install inventory also succeeded and
+confirmed the native VPN service and dedicated firewall on the lab.
+
+The owner uses the provider web console rather than an existing Kali SSH key.
+A temporary file-download path is therefore implemented: a separate public-key
+account is forced into read-only internal SFTP, chrooted to just the two VPN
+client files, with no shell/forwarding/password authentication or other key
+providers. Its grant expires after 24 hours; a fixed revocation action removes
+the key and private export copies. The owner's private download key is generated
+on Kali and never supplied to the assistant.
+
+The actual Debian 13 SSH integration test passes download, chroot escape denial,
+mutation denial, no shell, revocation, and preservation of root administrative
+access. There are now 26 lab/gate/download unit tests plus 109 desktop tests.
+Production/lab download enrollment awaits the owner's public key; no claim is
+made that a physical Kali VPN connection has been tested.
+
 ## Original Access Server recovery reference
 
 Keep the existing root recovery console open. Inspect Access Server's current

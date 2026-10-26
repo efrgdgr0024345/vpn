@@ -165,7 +165,7 @@ def private_file(path, contents):
 
 
 def execute(operation, environment, run=bounded_run):
-    if operation not in ('connectivity', 'inventory', 'install-foundation', 'test-foundation','probe-udp'):
+    if operation not in ('connectivity', 'inventory', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download'):
         raise LabError('Unsupported lab operation.')
     host, port, fingerprint = settings(environment)
     known = verified_host(host, port, fingerprint, run)
@@ -185,15 +185,31 @@ def execute(operation, environment, run=bounded_run):
         revision=environment.get('GITHUB_SHA','local-test')
         if revision!='local-test' and not re.fullmatch(r'[0-9a-f]{40}',revision):
             raise LabError('Invalid deployment revision.')
+        foundation=(ROOT/'ops/server_foundation.py').read_text()
         program=('SELFTEST_SOURCE = '+repr(selftest)+'\nNOTICES_SOURCE = '+repr(notices)
                  +'\nDEPLOYED_REVISION = '+repr(revision)+'\n'
-                 +(ROOT/'ops/server_foundation.py').read_text())
+                 +'FOUNDATION_SOURCE = '+repr(foundation)+'\n'+foundation)
         # Both values are validated numeric/literal-IP strings, never shell input.
         remote_command+=' --endpoint '+host+' --ssh-port '+port
         timeout=1500
     elif operation=='test-foundation':
         program=(ROOT/'ops/server_selftest.py').read_text()
         timeout=130
+    elif operation=='prepare-download':
+        value=environment.get('VPN_LAB_DOWNLOAD_PUBLIC_KEY','').strip()
+        fields=value.split()
+        if '\n' in value or '\r' in value or len(fields)<2 or fields[0]!='ssh-ed25519':
+            raise LabError('Supply an ED25519 public key for download enrollment.')
+        try:
+            wire=base64.b64decode(fields[1],validate=True)
+        except ValueError:
+            raise LabError('Invalid download public key.') from None
+        if len(wire)!=51 or wire[:19]!=b'\0\0\0\x0bssh-ed25519\0\0\0\x20':
+            raise LabError('Invalid ED25519 public key.')
+        value='ssh-ed25519 '+fields[1]+' vpn-lab-download'
+        program='DOWNLOAD_PUBLIC_KEY = '+repr(value)+'\n'+(ROOT/'ops/configure_download.py').read_text()
+    elif operation=='close-download':
+        program='REVOKE_DOWNLOAD = True\n'+(ROOT/'ops/configure_download.py').read_text()
     secret = environment.get('VPN_LAB_SSH_PRIVATE_KEY', '').strip().replace('\r\n', '\n')
     if (len(secret) > 16384 or not secret.startswith('-----BEGIN OPENSSH PRIVATE KEY-----\n')
             or not secret.endswith('\n-----END OPENSSH PRIVATE KEY-----')):
@@ -258,6 +274,11 @@ def execute(operation, environment, run=bounded_run):
                       'host_routes_and_resolver_modified','credentials_exported'}
         elif operation=='probe-udp':
             expected={'public_udp_1194_received'}
+        elif operation=='prepare-download':
+            expected={'download_user','public_key_fingerprint','expires_utc','chrooted',
+                      'read_only','shell_access','credential_contents_returned'}
+        elif operation=='close-download':
+            expected={'new_download_access_closed','private_export_copies_removed'}
         if not isinstance(report, dict) or set(report) != expected:
             raise LabError('Inventory returned unexpected fields; raw output withheld.')
         if environment.get('GITHUB_ACTIONS') == 'true':

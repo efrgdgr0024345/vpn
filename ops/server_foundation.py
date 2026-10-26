@@ -426,6 +426,10 @@ account required pam_unix.so
             candidate=Path(__file__).resolve().with_name('server_selftest.py')
             selftest=read_owned(candidate)
         write('/usr/local/libexec/vpn-lab/server_selftest.py',selftest,0o644)
+        own_source=globals().get('FOUNDATION_SOURCE')
+        if not own_source:
+            own_source=read_owned(Path(__file__).resolve())
+        write('/usr/local/libexec/vpn-lab/server_foundation.py',own_source,0o644)
         notices=globals().get('NOTICES_SOURCE')
         if notices:
             write('/usr/local/share/doc/vpn-lab/THIRD_PARTY_NOTICES.md',notices,0o644)

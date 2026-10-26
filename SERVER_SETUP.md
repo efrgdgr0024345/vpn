@@ -12,6 +12,7 @@ environment and pinned provider-console host fingerprint:
 Installation additionally requires a successful push-CI run for the exact
 deployment commit. Missing, failed or unverifiable CI status blocks installation
 before the SSH secret is supplied to the administration job.
+The same gate protects download enrollment and revocation.
 
 | Operation | Effect |
 | --- | --- |
@@ -67,6 +68,16 @@ contains the VPN username followed by the password, on separate lines. Do not
 paste either file into chat or store it in GitHub logs, artifacts or source.
 The installer reuses existing credentials/PKI on a same-settings rerun instead
 of silently resetting them. Changes to the endpoint/SSH port require review.
+
+For owners using only the provider console, `prepare-download` accepts a public
+ED25519 key generated on their own computer. The key's private half never leaves
+that computer. A separate `vpn-lab-download` account is forced into read-only
+internal SFTP, with forwarding/TTY/shell access disabled and a root-owned chroot
+containing only `client.ovpn` and `login.txt`. The account cannot read the server's
+administrative keys, PKI or other files. Its public-key grant expires after 24
+hours. `close-download` deletes that key and the private export copies once the
+owner finishes; it prevents new logins rather than invalidating already copied
+VPN credentials or forcibly terminating an established SSH connection.
 
 Root/provider-console recovery remains independent of VPN access. Stopping
 `openvpn-server@vpn-lab.service` closes VPN access immediately. A password-only

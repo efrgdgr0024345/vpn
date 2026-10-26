@@ -12,6 +12,8 @@ sys.path.insert(0, str(ROOT / 'ci'))
 sys.path.insert(0, str(ROOT / 'ops'))
 import lab_admin
 import bootstrap_runner_key
+import configure_download
+import server_foundation
 
 
 def main():
@@ -61,6 +63,47 @@ X11Forwarding no
     if key.read_text() != original:
         raise SystemExit('Renewal replaced the existing private key.')
     lab_admin.execute('inventory', settings)
+    # A different client key gets only a chrooted, read-only SFTP view. The root
+    # administrative key and its files must be inaccessible through that view.
+    server_foundation.directory('/root/vpn-lab',0o700)
+    server_foundation.write('/root/vpn-lab/client.ovpn','fixture profile\n')
+    server_foundation.write('/root/vpn-lab/login.txt','vpn-lab-client\n'+'x'*43+'\n')
+    private=Path('/run/download-client-key')
+    subprocess.run(['/usr/bin/ssh-keygen','-q','-t','ed25519','-N','','-f',str(private)],
+                   check=True,capture_output=True)
+    configure_download.configure(private.with_suffix('.pub').read_text(),configuration,False)
+    os.kill(int(Path('/run/vpn-lab-test-sshd.pid').read_text()),1)
+    import time
+    time.sleep(.5)
+    known=Path('/run/download-known-hosts')
+    known.write_text(settings['VPN_LAB_HOST']+' '+' '.join(Path('/etc/ssh/ssh_host_ed25519_key.pub').read_text().split()[:2])+'\n')
+    options=['-F','/dev/null','-i',str(private),'-o','IdentitiesOnly=yes','-o','BatchMode=yes',
+             '-o','StrictHostKeyChecking=yes','-o','UserKnownHostsFile='+str(known),
+             '-o','GlobalKnownHostsFile=/dev/null','-o','ConnectTimeout=5']
+    target='vpn-lab-download@'+settings['VPN_LAB_HOST']
+    def sftp(batch):
+        return subprocess.run(['/usr/bin/sftp',*options,'-b','-',target],input=batch,
+                              text=True,capture_output=True,timeout=15)
+    result=sftp('get /files/client.ovpn /run/downloaded-profile\n')
+    if result.returncode or Path('/run/downloaded-profile').read_text()!='fixture profile\n':
+        # SFTP's normal diagnostic contains paths/status, never file contents.
+        print('SFTP fixture diagnostic: '+result.stderr[:2000],flush=True)
+        raise SystemExit('Read-only download did not return the selected fixture.')
+    Path('/root/sftp-private-sentinel').write_text('DO NOT SHARE TEST SENTINEL')
+    if sftp('get /root/sftp-private-sentinel /run/escaped\n').returncode==0 or Path('/run/escaped').exists():
+        raise SystemExit('Download escaped its chroot.')
+    if sftp('chmod 600 /files/client.ovpn\n').returncode==0:
+        raise SystemExit('Read-only download allowed a file mutation.')
+    shell=subprocess.run(['/usr/bin/ssh',*options,'-T',target,'id -u'],capture_output=True,timeout=10)
+    if shell.stdout.strip().isdigit():
+        raise SystemExit('Download key obtained a shell.')
+    configure_download.revoke()
+    if sftp('get /files/client.ovpn /run/after-revoke\n').returncode==0 or Path('/run/after-revoke').exists():
+        raise SystemExit('Revoked download key was accepted.')
+    if (configure_download.BASE/'files/client.ovpn').exists():
+        raise SystemExit('Private export copy survived revocation.')
+    lab_admin.execute('inventory', settings)
+    print('PASS: real chrooted SFTP download, parent-file isolation, mutation refusal, no shell and revocation.')
     print('PASS: real SSH host pinning, root inventory, expired-key refusal and same-key renewal on Debian 13.')
 
 

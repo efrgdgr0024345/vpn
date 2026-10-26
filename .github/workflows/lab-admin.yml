@@ -7,7 +7,7 @@ on:
       operation:
         description: Lab operation (install-foundation changes the disposable server)
         type: choice
-        options: [connectivity, inventory, install-foundation, test-foundation, probe-udp]
+        options: [connectivity, inventory, install-foundation, test-foundation, probe-udp, prepare-download, close-download]
         default: connectivity
       host:
         description: Disposable lab server IPv4 address (public workflow input)
@@ -21,6 +21,10 @@ on:
         description: SSH port
         default: '22'
         required: true
+        type: string
+      download_public_key:
+        description: ED25519 PUBLIC key for prepare-download (never enter a private key)
+        required: false
         type: string
 
 permissions:
@@ -48,7 +52,7 @@ jobs:
 
   verified-build:
     needs: connectivity
-    if: inputs.operation == 'install-foundation'
+    if: inputs.operation == 'install-foundation' || inputs.operation == 'prepare-download' || inputs.operation == 'close-download'
     permissions:
       contents: read
       actions: read
@@ -80,4 +84,5 @@ jobs:
           VPN_LAB_PORT: ${{ inputs.port }}
           VPN_LAB_SSH_PRIVATE_KEY: ${{ secrets.VPN_LAB_SSH_PRIVATE_KEY }}
           VPN_LAB_OPERATION: ${{ inputs.operation }}
+          VPN_LAB_DOWNLOAD_PUBLIC_KEY: ${{ inputs.download_public_key }}
         run: /usr/bin/python3 -I -B ci/lab_admin.py "$VPN_LAB_OPERATION"

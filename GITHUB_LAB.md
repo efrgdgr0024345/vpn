@@ -12,6 +12,8 @@ lab droplet. The working Access Server is outside this workflow's scope.
 | `install-foundation` | Provision the disposable Debian 13 OpenVPN foundation, replacing its firewall and retiring old runner services. |
 | `test-foundation` | Test the running VPN locally without exporting its credentials or changing host routes/DNS. |
 | `probe-udp` | Send a random non-secret UDP probe from the GitHub runner and observe its arrival on the lab's external interface. No VPN credentials are exported. |
+| `prepare-download` | Authorize a supplied public key for a 24-hour, read-only, chrooted SFTP view of the two client files. No shell or forwarding. |
+| `close-download` | Remove the download key and private export copies, preventing new download logins. |
 
 There is no arbitrary command input or automatic production deployment.
 SERVER_SETUP.md documents the explicitly selected installation/test operations.
@@ -95,6 +97,11 @@ host mounts, published ports or added capabilities. It runs real OpenSSH and
 the actual console bootstrap, verifies a pinned SSH inventory, rejects an expired
 key, renews that same key and confirms restored access. Package signatures stay
 enabled. The existing 109-test desktop suite, Xvfb and nft checks remain separate.
+
+The SSH integration also checks a separate chrooted SFTP account: selected-file
+download succeeds, parent files cannot be read, file mutations and shells are
+denied, revocation closes new logins, and root administration remains available.
+The gate/download safeguards bring the current lab unit suite to 26 tests.
 
 Local tests and [GitHub-hosted validation](https://github.com/efrgdgr0024345/vpn/actions/runs/40166128639)
 pass. The [initial connectivity run](https://github.com/efrgdgr0024345/vpn/actions/runs/40166246400)
