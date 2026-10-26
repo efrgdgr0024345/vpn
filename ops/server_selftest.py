@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import re
+import resource
 import secrets
 import signal
 import socket
@@ -60,6 +61,8 @@ def private_counter():
 def test():
     if os.geteuid()!=0:
         raise TestFailure('Self-test requires local root on the lab server.')
+    resource.setrlimit(resource.RLIMIT_CORE,(0,0))
+    os.umask(0o077)
     profile=Path('/root/vpn-lab/client.ovpn').read_text()
     login=Path('/root/vpn-lab/login.txt').read_text()
     values=login.splitlines()

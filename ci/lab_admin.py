@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import resource
 import subprocess
 import sys
 import tempfile
@@ -165,6 +166,7 @@ def private_file(path, contents):
 
 
 def execute(operation, environment, run=bounded_run):
+    resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     if operation not in ('connectivity', 'inventory', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download'):
         raise LabError('Unsupported lab operation.')
     host, port, fingerprint = settings(environment)

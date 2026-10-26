@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import pwd
 import re
+import resource
 import secrets
 import stat
 import subprocess
@@ -98,6 +99,7 @@ def export_file(path,value,uid,gid):
 def configure(value,configuration=Path('/etc/ssh/sshd_config'),reload_service=True):
     if os.geteuid()!=0:
         raise server.SetupError('Download enrollment requires local lab root.')
+    resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     public,fingerprint=public_key(value)
     profile=server.read_owned(server.EXPORT/'client.ovpn')
     login=server.read_owned(server.EXPORT/'login.txt')
