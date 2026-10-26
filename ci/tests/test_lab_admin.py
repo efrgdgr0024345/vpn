@@ -1,5 +1,7 @@
 import base64
 import hashlib
+import io
+import json
 import os
 from pathlib import Path
 import stat
@@ -7,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from urllib.parse import unquote
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +25,10 @@ SETTINGS = {'VPN_LAB_HOST': '192.0.2.10', 'VPN_LAB_PORT': '22',
             'VPN_LAB_HOST_FINGERPRINT': FINGERPRINT}
 SCAN = '192.0.2.10 ssh-ed25519 ' + BLOB + '\n'
 KEY = '-----BEGIN OPENSSH PRIVATE KEY-----\nTEST FIXTURE ONLY\n-----END OPENSSH PRIVATE KEY-----'
+REPORT = {'os': {'ID': 'debian'}, 'kernel': 'fixture', 'root_free_bytes': 1024,
+          'running_service_units': [], 'listening_ports': [],
+          'candidate_vpn_subnet_overlaps_existing_route': False,
+          'firewall_summary': None, 'tools': {}}
 
 
 class ConnectionTests(unittest.TestCase):
@@ -95,6 +102,30 @@ class ConnectionTests(unittest.TestCase):
             return self.result() if argv[0].endswith('ssh-keyscan') else self.result('{"password":"PRIVATE"}')
         with self.assertRaisesRegex(lab.LabError, 'unexpected fields'):
             lab.execute('inventory', {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY}, run)
+
+    def test_check_report_preserves_literal_percent_sequences_without_publishing_key(self):
+        report = {**REPORT, 'running_service_units': ['example%0Aservice.service']}
+        def run(argv, **kwargs):
+            return self.result() if argv[0].endswith('ssh-keyscan') else self.result(json.dumps(report))
+        output = io.StringIO()
+        with patch('sys.stdout', output):
+            lab.execute('inventory', {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY,
+                                     'GITHUB_ACTIONS': 'true'}, run)
+        notice = next(line for line in output.getvalue().splitlines()
+                      if line.startswith('::notice title=VPN lab inventory::'))
+        self.assertEqual(json.loads(unquote(notice.split('::', 2)[2])), report)
+        self.assertIn('example%250Aservice.service', notice)
+        self.assertNotIn('TEST FIXTURE ONLY', output.getvalue())
+
+    def test_oversized_check_report_fails_before_printing_server_data(self):
+        report = {**REPORT, 'running_service_units': ['X'*60001]}
+        def run(argv, **kwargs):
+            return self.result() if argv[0].endswith('ssh-keyscan') else self.result(json.dumps(report))
+        output = io.StringIO()
+        with patch('sys.stdout', output), self.assertRaisesRegex(lab.LabError, 'size limit'):
+            lab.execute('inventory', {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY,
+                                     'GITHUB_ACTIONS': 'true'}, run)
+        self.assertNotIn('X'*100, output.getvalue())
 
     def test_workflow_context_must_be_manual_main_in_this_repo(self):
         with patch.dict(os.environ, {'GITHUB_EVENT_NAME':'pull_request', 'GITHUB_REF':'refs/heads/main',

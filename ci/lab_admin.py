@@ -169,6 +169,15 @@ def execute(operation, environment, run=bounded_run):
                     'candidate_vpn_subnet_overlaps_existing_route', 'firewall_summary', 'tools'}
         if not isinstance(report, dict) or set(report) != expected:
             raise LabError('Inventory returned unexpected fields; raw output withheld.')
+        if environment.get('GITHUB_ACTIONS') == 'true':
+            # Checks annotations are available through api.github.com even when
+            # signed log-download hosts cannot be reached by the controller.
+            # This contains only the same approved inventory already in logs.
+            message = json.dumps(report, sort_keys=True, separators=(',', ':'))
+            if len(message.encode('utf-8')) > 60000:
+                raise LabError('Inventory exceeds the check-report size limit; raw output withheld.')
+            message = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+            print('::notice title=VPN lab inventory::' + message)
         print(json.dumps(report, indent=2, sort_keys=True))
     print('Read-only inventory completed. No server settings changed; runner key file removed.')
 

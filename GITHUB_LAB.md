@@ -61,7 +61,10 @@ are not committed to source. Public Actions logs show the inventory: OS/kernel,
 free disk, service unit names, listening port numbers, tool presence, firewall
 counts and a candidate-subnet conflict check. IP addresses, profiles, credentials,
 process arguments, account databases, configuration contents and journals are
-omitted.
+omitted. The approved inventory is also attached as a check notice, so an
+administrator can read it through GitHub's Checks API when log-download hosts
+are unreachable. Workflow-command escapes preserve literal percent sequences,
+and oversized notices fail before server data is printed.
 
 The runner verifies the fingerprint before authentication and keeps strict SSH
 host checking enabled. Private temporary key files are 0600, deleted after use
@@ -80,9 +83,9 @@ and the user's other administrative keys.
 
 ## Validation
 
-Twelve new unit tests cover host/input validation, strict SSH arguments, key-file
+Fourteen unit tests cover host/input validation, strict SSH arguments, key-file
 cleanup, manual/main context, unrelated-key preservation, symlink/hardlink
-refusal and interrupted authorization updates.
+refusal, interrupted authorization updates and bounded/escaped check reports.
 
 `sh ci/test_ssh_container.sh` uses a digest-pinned Debian 13 container without
 host mounts, published ports or added capabilities. It runs real OpenSSH and
