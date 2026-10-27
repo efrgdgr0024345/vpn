@@ -262,6 +262,8 @@ def execute(operation, environment, run=bounded_run):
             if sender:
                 sender.join(timeout=1)
         if result.returncode:
+            if result.returncode == 255 and re.search(r'Permission denied \([^\r\n]*\)', result.stderr):
+                raise LabError('SSH authentication rejected. The dedicated key grant may have expired; renew it in the provider console. Raw stderr withheld.')
             try:
                 failure=json.loads(result.stdout)
             except ValueError:

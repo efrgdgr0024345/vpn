@@ -103,6 +103,18 @@ class ConnectionTests(unittest.TestCase):
         with self.assertRaisesRegex(lab.LabError, 'unexpected fields'):
             lab.execute('inventory', {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY}, run)
 
+    def test_auth_rejection_is_classified_without_disclosing_stderr(self):
+        def run(argv, **kwargs):
+            if argv[0].endswith('ssh-keyscan'):
+                return self.result()
+            return subprocess.CompletedProcess([], 255, 'PRIVATE OUTPUT',
+                'root@192.0.2.10: Permission denied (publickey). PRIVATE STDERR')
+        with self.assertRaises(lab.LabError) as error:
+            lab.execute('inventory', {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY}, run)
+        self.assertIn('SSH authentication rejected', str(error.exception))
+        self.assertNotIn('PRIVATE', str(error.exception))
+        self.assertNotIn('192.0.2.10', str(error.exception))
+
     def test_check_report_preserves_literal_percent_sequences_without_publishing_key(self):
         report = {**REPORT, 'running_service_units': ['example%0Aservice.service']}
         def run(argv, **kwargs):
