@@ -24,6 +24,11 @@ server or phone has been updated.
    fresh broker admission: establishment without an approved pending client ID
    is killed without receiving a forwarding grant.
 
+The server pushes explicit exit notification for prompt voluntary release.
+An abrupt loss of power/connectivity still needs OpenVPN's dead-peer detection
+(up to its 60-second keepalive timeout). A competing login must not shorten that
+timeout by taking over; independent administrator reset remains available.
+
 A token-only reconnect receives `AUTH_FAILED,SESSION`, instructing clients to
 discard the old token and use initial authentication again. Revocation/expiry
 uses a `HALT` message so a disabled session does not enter an automatic retry
@@ -103,7 +108,8 @@ revocation and malformed management input. Real integration uses separate
 Debian server/DNS containers, native PAM/OpenVPN/nftables, actual certificate
 keys, private token observation and unconfigured client TUNs. The packet test
 also freezes the broker to verify expiry without a cleanup handler, attempts
-old-token replay and transfers access to a different enrolled certificate.
+old-token replay, transfers access to a different enrolled certificate, and
+checks normal disconnect releases ownership promptly for the third identity.
 
 The live self-test uses protected credentials locally, temporarily changes and
 restores test device policy, and deliberately disrupts its own sessions. Run it

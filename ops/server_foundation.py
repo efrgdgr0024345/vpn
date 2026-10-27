@@ -189,6 +189,7 @@ push "redirect-gateway def1 ipv6"
 push "block-ipv6"
 push "dhcp-option DNS 9.9.9.9"
 push "dhcp-option DNS 149.112.112.112"
+push "explicit-exit-notify 1"
 verb 3
 '''
 

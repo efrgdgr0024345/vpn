@@ -290,6 +290,7 @@ def execute(operation, environment, run=bounded_run):
                       'kernel_lease_expires_when_broker_frozen','ownership_transfers_between_devices',
                       'device_revocation_denies_forwarding',
                       'replayed_session_token_denied',
+                      'normal_disconnect_releases_slot',
                       'host_routes_and_resolver_modified','credentials_exported'}
         elif operation=='probe-udp':
             expected={'public_udp_1194_received'}

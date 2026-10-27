@@ -339,8 +339,27 @@ def test(broker_pid=None):
                 channel.settimeout(.25)
                 if not public_dns():
                     raise TestFailure('The new session owner could not forward packets.')
+            finally:
+                channel.close()
+            # A normal user disconnect must release the global slot promptly,
+            # rather than waiting for the server's 60-second dead-peer timer.
+            stop(phone)
+            time.sleep(1)
+            android,androidlog=start('lab-release',values[1],'android')
+            if not initialized(android,androidlog,12):
+                raise TestFailure('A normal disconnect did not promptly release the session slot.')
+            if 'ifconfig 172.27.240.12 255.255.255.0' not in androidlog.read_text(errors='replace'):
+                raise TestFailure('Android identity did not receive its distinct address.')
+            source='172.27.240.12'
+            command(['/usr/sbin/ip','link','set','dev','tun-lab-release','up'])
+            channel=socket.socket(socket.AF_PACKET,socket.SOCK_RAW,socket.htons(3))
+            try:
+                channel.bind(('tun-lab-release',0))
+                channel.settimeout(.25)
+                if not public_dns():
+                    raise TestFailure('Packet forwarding failed after a normal ownership release.')
                 changed=json.loads(policy_before)
-                changed['iphone']['enabled']=False
+                changed['android']['enabled']=False
                 update_registry(json.dumps(changed)+'\n')
                 time.sleep(2)
                 if public_dns():
@@ -357,6 +376,7 @@ def test(broker_pid=None):
                     'kernel_lease_expires_when_broker_frozen':True,
                     'ownership_transfers_between_devices':True,'device_revocation_denies_forwarding':True,
                     'replayed_session_token_denied':True,
+                    'normal_disconnect_releases_slot':True,
                     'host_routes_and_resolver_modified':False,
                     'credentials_exported':False}
         finally:
