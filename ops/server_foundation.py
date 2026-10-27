@@ -508,6 +508,7 @@ After=nftables.service
 [Service]
 Restart=on-failure
 RestartSec=3s
+RuntimeDirectoryMode=0700
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes

@@ -257,10 +257,10 @@ def main():
                 info = path.lstat()
                 if not stat.S_ISSOCK(info.st_mode) or info.st_uid != 0:
                     raise BrokerError('Unprotected management socket.')
-                # OpenVPN creates its Unix listener with permissive mode bits;
-                # its --management-client-user root check already rejects other
-                # peers. Tighten the file too, inside its root-controlled parent.
-                path.chmod(0o600)
+                # OpenVPN creates permissive socket bits, but the service's
+                # root-only runtime directory and management-client-user root
+                # check protect it. The broker's read-only filesystem sandbox
+                # deliberately cannot chmod files in the daemon's runtime.
                 channel.connect(SOCKET)
                 break
             except (FileNotFoundError, ConnectionRefusedError):
