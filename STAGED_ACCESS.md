@@ -59,7 +59,9 @@ There is no wall-clock deadline that can be extended by setting the clock back.
 OpenVPN handles certificate validity and token timestamps separately.
 
 Source addresses other than the assigned grant, private/reserved destinations,
-cloud metadata, host services and IPv6 forwarding are denied. No client-to-client
+cloud metadata, other host services and IPv6 forwarding are denied. The sole
+VPN host-service exception is the private recursive DNS resolver, UDP/TCP 53,
+which also requires the current authorization grant. No client-to-client
 shortcut is configured. The exclusive global OpenVPN limit remains one.
 
 ## Trust boundary and device administration

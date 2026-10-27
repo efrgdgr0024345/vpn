@@ -29,19 +29,29 @@ sandbox. Check the SSH host fingerprint against the provider-console value;
 never disable host-key verification. Close the download grant after retrieval.
 The files stay private; no Actions artifact or chat transfer is used.
 
-## Platform setup
+## Owned Kali app setup
 
-- Kali: import the desktop identity through protected installation and validate
-  the matching firewall/resolver policy. Do not launch root OpenVPN against an
-  editable home-directory profile or blindly overlay the working VPN's routes.
-  A Linux CLI does not automatically apply pushed DNS options. Agree a test
-  window or use an isolated client network before changing the owner's routes.
-- iPhone/Android: use a current OpenVPN Connect app and the corresponding
-  separately issued identity. Record OS/app versions. The Linux desktop
-  installer is not a phone app. Transfer profiles privately; remove temporary
-  export copies after import. Do not reuse the Kali key on either phone.
-- Platform-specific VPN lockdown settings need review and testing. Importing a
-  profile alone does not establish always-on protection or prevent every leak.
+The owner has already downloaded the Kali profile and login file privately,
+verified the server host key and confirmed mode 0600. Download access is closed;
+do not reopen it merely to install a new public-source application version.
+
+Install the exact reviewed source following `vpn-dashboard/INSTALL.md`, as the
+ordinary desktop user. The wizard imports the protected profile; installation
+itself changes no networking. Record the installed version/source commit.
+Start the owned app from its menu entry and retain access to the local terminal
+for recovery. There is no NetworkManager VPN plugin or external VPN frontend.
+
+The first Connect applies a runtime firewall and private VPN DNS. Direct Wi-Fi
+Internet remains blocked after disconnect until explicit **Restore normal
+networking**. Keep the documented protected recovery commands available offline.
+This version requires a regular root-owned resolver file and an empty firewall
+or its own previously saved state; it refuses unrelated firewall migration.
+
+Native iPhone/Android apps are not implemented. The separately enrolled identities
+have been exercised by Linux test clients, which does not establish phone support.
+Do not treat the earlier stock-client proposal as the current rollout plan.
+Boot-time client enforcement is also not implemented: this is a controlled
+acceptance build, not an always-on or daily-use certification.
 
 ## Acceptance checks
 
@@ -50,8 +60,9 @@ The files stay private; no Actions artifact or chat transfer is used.
 2. Let the session span TLS/token renewal. No second password should be typed.
 3. Attempt a login from another enrolled device while the first owns the slot.
    It must fail without interrupting the first device's working connection.
-4. Disconnect the first normally, then connect the second. Repeat for the third
-   identity. There must never be two sessions forwarding traffic together.
+4. Disconnect the first normally, then connect the second. Additional enrolled
+   devices require a separate controlled test client until owned phone apps exist.
+   There must never be two sessions forwarding traffic together.
 5. Check Wi-Fi/mobile-data changes, screen lock, sleep/resume, app termination,
    internet loss and reconnect. Record whether fresh initial authentication is
    required after a new connection; old-token-only reconnect is not admission.
@@ -60,7 +71,10 @@ The files stay private; no Actions artifact or chat transfer is used.
 7. Revoke a test device through the workflow. Its session must lose forwarding
    and fresh logins must fail. Reenable only a known uncompromised test key.
 
-Report pass/fail, platform/app versions and sanitized error text. Do not paste
+For the first physical test, report installation, Connect, local session events,
+Disconnect and explicit restoration first. Continue with packet/transition tests
+only after those steps work. Report pass/fail, platform/app versions and sanitized
+error text. Do not paste
 profiles, passwords, token messages or complete management logs. Server recovery
 is through the provider console or fixed session-reset workflow, never by
 weakening authentication or evicting an owner on an ordinary competing login.

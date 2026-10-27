@@ -1,5 +1,4 @@
 """Read local protected credentials to test the VPN; never export their contents."""
-from contextlib import ExitStack
 import ipaddress
 import json
 import os
@@ -119,7 +118,7 @@ def test(broker_pid=None):
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid,signal.SIGKILL)
                 process.wait()
-    with tempfile.TemporaryDirectory(prefix='vpn-lab-test-',dir='/run') as directory, ExitStack() as resources:
+    with tempfile.TemporaryDirectory(prefix='vpn-lab-test-',dir='/run') as directory:
         root=Path(directory)
         def start(name,password,device='kali'):
             selected=profile if device=='kali' else read_private('/root/vpn-lab/devices/'+device+'/client.ovpn')
@@ -129,19 +128,21 @@ def test(broker_pid=None):
                 fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
                 with os.fdopen(fd,'w') as stream:
                     stream.write(value)
-            output=resources.enter_context(open(log,'wb'))
-            os.chmod(log,0o600)
-            extra=[]
-            if name=='lab-check':
-                extra=['--management',str(root/'token-observer'),'unix','--management-client-user','root']
-            process=subprocess.Popen(['/usr/sbin/openvpn','--config',str(config),
-                 '--auth-user-pass',str(auth),'--auth-nocache','--dev','tun-'+name,
-                 '--dev-type','tun','--ifconfig-noexec','--route-noexec',
-                 '--connect-retry','1','--connect-timeout','5','--connect-retry-max','1',
-                 '--user','vpn-lab-transport','--group','vpn-lab-transport',
-                 '--reneg-sec','5',
-                 '--script-security','1']+extra,stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,
-                 start_new_session=True,env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
+            # Popen duplicates stdout into the child; close the parent's copy
+            # immediately after spawn rather than retaining it for the whole test.
+            with open(log,'wb') as output:
+                os.chmod(log,0o600)
+                extra=[]
+                if name=='lab-check':
+                    extra=['--management',str(root/'token-observer'),'unix','--management-client-user','root']
+                process=subprocess.Popen(['/usr/sbin/openvpn','--config',str(config),
+                     '--auth-user-pass',str(auth),'--auth-nocache','--dev','tun-'+name,
+                     '--dev-type','tun','--ifconfig-noexec','--route-noexec',
+                     '--connect-retry','1','--connect-timeout','5','--connect-retry-max','1',
+                     '--user','vpn-lab-transport','--group','vpn-lab-transport',
+                     '--reneg-sec','5',
+                     '--script-security','1']+extra,stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,
+                     start_new_session=True,env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
             processes.append(process)
             if extra:
                 observer=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)

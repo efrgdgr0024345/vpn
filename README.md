@@ -39,7 +39,8 @@ bash install.sh
 ```
 
 The guided installer installs the app/helper, imports validated local settings,
-and adds a menu launcher. Firewall migration remains a separate explicit step.
+and adds a menu launcher. Installation changes no networking; Connect activates the owned runtime guard
+and private DNS after validation. See INSTALL.md for restoration and test limits.
 It is for the Linux desktop, not the Access Server VPS. The local compatibility
 fix now accepts quoted certificate names such as `OpenVPN Server`; see
 PROJECT_STATUS.md for the test and deployment status.

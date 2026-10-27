@@ -9,7 +9,7 @@ OpenVPN Community and distribution packages, not Access Server.
 Use the manual `Lab server administration` workflow on `main`, with the `vpn-lab`
 environment and pinned provider-console host fingerprint:
 
-Installation additionally requires a successful push-CI run for the exact
+Installation additionally requires successful functional and security push-CI for the exact
 deployment commit. Missing, failed or unverifiable CI status blocks installation
 before the SSH secret is supplied to the administration job.
 The same gate protects download/device mutations, session reset and the
@@ -18,7 +18,7 @@ disruptive live packet self-test.
 | Operation | Effect |
 | --- | --- |
 | `inventory` | Approved read-only OS, ports, services and firewall summary. |
-| `install-foundation` | Install/update required Debian packages; retire old self-hosted runner services; provision credentials and PKI; apply the dedicated default-drop firewall; persist and start the OpenVPN service. |
+| `install-foundation` | Install/update required Debian packages; retire old self-hosted runner services; provision credentials and PKI; apply the dedicated default-drop firewall; persist and start the VPN, broker and private recursive DNS services. |
 | `test-foundation` | Use protected local credentials to test the real running VPN. Credentials stay on the server. No desktop/client installation is performed. |
 | `probe-udp` | Confirm runner-originated UDP 1194 packets reach the external interface, using a random nonce and a short-lived packet listener. |
 | `device-status`, `revoke-device`, `enable-device`, `reset-sessions` | Device enrollment status, revocation and independent recovery; see STAGED_ACCESS.md. |
@@ -53,6 +53,11 @@ The deployed source commit is recorded in `/etc/openvpn/lab/state.json`.
   IPv4 internet traffic through NAT and blocks private/reserved networks and
   cloud metadata. IPv6 forwarding is denied, with client IPv6 blocking pushed
   through the VPN. The host's own outbound package/management traffic is allowed.
+- The private Unbound resolver binds only to the VPN address. Authorized VPN
+  clients can query UDP/TCP 53; no public recursive listener is opened. Production
+  resolves recursively using distribution DNS root trust data, with no public
+  forwarding resolver and no query/reply logging. Public-name resolution still
+  depends on root/authoritative DNS infrastructure.
 - Installation intentionally replaces the disposable server's firewall after a
   kernel syntax check. A root-only pre-change firewall snapshot is retained at
   `/root/vpn-lab/recovery/nftables.before`. SSH administrative settings and keys
