@@ -2,13 +2,13 @@
 
 The owner has selected [our own client application](OWNED_CLIENT.md), with local
 controls/logs and reviewable code, rather than a NetworkManager VPN plugin or
-stock VPN frontend. The new Kali app implementation is undergoing validation;
+stock VPN frontend. The Kali app has passed automated validation; controlled device acceptance is next;
 native phone apps remain a separate phase. Runtime dependencies and trust limits
 are explicit. GitHub CodeQL security/quality review now complements functional
 checks; both workflows gate lab mutations for the exact commit.
 
 This project contains a Debian 13 OpenVPN lab managed through GitHub Actions and
-a Linux desktop-client prototype. The working Access Server stays separate.
+an owned Kali desktop client. The working Access Server stays separate.
 See [server setup](SERVER_SETUP.md), [workflow administration](GITHUB_LAB.md),
 [third-party notices](THIRD_PARTY_NOTICES.md) and
 [current evidence/status](PROJECT_STATUS.md).
@@ -23,8 +23,9 @@ The lab has passed live acceptance after reboot. [Device testing](DEVICE_TESTING
 is now the next phase; physical mobile compatibility and client leak protection
 remain to be verified.
 
-A local Linux desktop dashboard for read-only network diagnostics and explicit
-terminal-authenticated OpenVPN startup. The application is in
+The desktop app controls explicit terminal-authenticated OpenVPN sessions, its
+runtime guard/resolver, local session events and public-code installation audit.
+It also provides read-only network diagnostics. The application is in
 [vpn-dashboard](vpn-dashboard/README.md).
 
 The hardened launcher accepts only an installed root-owned helper and the
@@ -61,7 +62,8 @@ broker. Third-party attribution is recorded in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 The proposed next system is described in [NEW_VPN_DESIGN.md](NEW_VPN_DESIGN.md).
-That architecture is a design proposal; it is not implemented by this installer.
+That document includes broader future proposals. STAGED_ACCESS.md describes the
+selected implemented single-tunnel design; the desktop installer is separate.
 
 ```sh
 cd vpn-dashboard

@@ -21,7 +21,7 @@ distribution-provided tools; it does not vendor their source or binaries.
 | Python 3 | The Python Software Foundation and contributors. PSF License Version 2 and bundled notices; [license](https://docs.python.org/3/license.html). |
 | Debian GNU/Linux | Debian developers, package maintainers and upstream authors. Packages retain their individual licenses and `/usr/share/doc/*/copyright` files; [Debian](https://www.debian.org/). |
 | GitHub Actions checkout | GitHub and contributors. MIT; [license at the pinned action revision](https://github.com/actions/checkout/blob/11bd71901bbe5b1630ceea73d27597364c9af683/LICENSE). |
-| GitHub CodeQL and dependency review | GitHub and contributors. The actions, query libraries and CodeQL tooling retain their respective upstream licenses/usage terms; [CodeQL action](https://github.com/github/codeql-action), [queries](https://github.com/github/codeql), [dependency review](https://github.com/actions/dependency-review-action). Used for eligible public-repository CI, not embedded in the client. |
+| GitHub CodeQL, dependency review and Dependabot | GitHub and contributors. The actions, query libraries and CodeQL tooling retain their respective upstream licenses/usage terms; [CodeQL action](https://github.com/github/codeql-action), [queries](https://github.com/github/codeql), [dependency review](https://github.com/actions/dependency-review-action), [Dependabot](https://github.com/dependabot/dependabot-core). Used for eligible public-repository CI, not embedded in the client. |
 
 The original desktop dashboard came from the user-supplied `vpn-dashboard.zip`.
 Its original author and repository-wide license were not identified in the

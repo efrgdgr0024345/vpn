@@ -1,19 +1,19 @@
 {
   "environment": "vpn-lab",
-  "stage": "single-tunnel staged access; controlled device acceptance ready",
-  "deployed_source_commit": "f7de4dd1629c827e92c1573ba5d1d26153202cf1",
+  "stage": "owned Kali client controlled acceptance; native mobile apps and client boot guard pending",
+  "deployed_source_commit": "b9917442c0d342d7bab2eb01e4d80e6e81ba7e01",
   "os": "Debian 13",
-  "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431184235",
-  "live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431541188",
-  "reboot": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431275049",
-  "post_reboot_inventory": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431424970",
-  "observed_post_reboot_uptime_seconds": 68,
-  "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431775566",
-  "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431176614",
-  "unit_tests_per_ubuntu_job": 152,
+  "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447778025",
+  "live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448325728",
+  "reboot": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448105690",
+  "post_reboot_inventory": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448251641",
+  "observed_post_reboot_uptime_seconds": 67,
+  "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447778288",
+  "unit_tests_per_ubuntu_job": 171,
   "client_transfer": "Owner confirmed Kali profile/login downloaded with mode 0600 and verified server ED25519 fingerprint. Temporary download access closed; server export copies removed.",
   "client_transfer_closure": "https://github.com/efrgdgr0024345/vpn/actions/runs/40437848772",
   "validated": [
+    "private VPN-only recursive DNS answers; native Unbound service recovers after reboot",
     "native VPN and broker services recover automatically after reboot",
     "persistent default-drop input and forwarding firewall",
     "separate approved Kali, iPhone and Android certificate identities exercised with Linux clients",
@@ -31,12 +31,38 @@
     "external UDP 1194 reaches the rebooted server"
   ],
   "not_yet_validated": [
-    "physical Kali installation, resolver and firewall integration",
-    "physical iPhone and Android app import and session-token behavior",
-    "client kill switch and physical-interface IPv4/IPv6/DNS leak testing",
-    "physical mobile network changes, sleep/resume and reconnect behavior"
+    "physical Kali installation, OpenVPN 2.7, resolver and firewall integration",
+    "client physical-interface IPv4/IPv6/DNS leak testing and network/suspend transitions",
+    "client early-boot guard: not implemented",
+    "owned native iPhone/Android applications: not implemented",
+    "physical mobile networking and device handover behavior"
   ],
   "selected_design": "One tunnel, separate device keys, one global session, disconnect-before-transfer. No literal two-tunnel handoff.",
   "device_key_limit": "Keys originate on the server and are exported in private profiles; no hardware attestation or nonexportability claim.",
-  "private_material": "Private server originals and the owner's Kali copies remain protected; no keys, passwords, tokens or real profiles in this record."
+  "private_material": "Private server originals and the owner's Kali copies remain protected; no keys, passwords, tokens or real profiles in this record.",
+  "pre_reboot_live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447890007",
+  "previous_external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431775566",
+  "github_security": {
+    "workflow": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447778310",
+    "source_commit": "b9917442c0d342d7bab2eb01e4d80e6e81ba7e01",
+    "codeql_findings": 0,
+    "blocking_findings": 0,
+    "native_repository_security_settings": "Integration cannot enable owner-only alerts/scanning/push-protection settings (GitHub 403); owner verification pending."
+  },
+  "client_ci_validated": [
+    "authenticated Unix peer checks and root-only fixed stop command",
+    "process-descriptor stop targets only owned child",
+    "real nftables guard and resolver repair/restore in an isolated network namespace",
+    "real OpenVPN session supervised by app backend in the isolated Debian harness",
+    "actual Tk dashboard/log window startup",
+    "public-code manifest detects changed and unexpected installed code"
+  ],
+  "private_resolver": {
+    "implementation": "distribution Unbound and DNS root trust data",
+    "address": "172.27.240.1",
+    "public_forwarder": false,
+    "queries_logged": false,
+    "access": "UDP/TCP 53 only from the currently authorized VPN address on the tunnel"
+  },
+  "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448467493"
 }

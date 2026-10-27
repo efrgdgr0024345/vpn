@@ -5,9 +5,9 @@ standalone app, local logs and reviewable code, rejected a NetworkManager VPN
 plugin, and explicitly requested GitHub security/code review. OWNED_CLIENT.md
 describes the Kali implementation and its limits. Native phone apps are a later
 phase. GitHub CodeQL security/quality and PR dependency review are configured;
-functional and security checks both gate exact-commit lab mutations. The source
-now includes a VPS-owned recursive resolver instead of a public DNS forwarder;
-deployment evidence remains in deployments/vpn-lab.json until the new build passes.
+functional and security checks both gate exact-commit lab mutations. The VPS-owned
+recursive resolver is installed and live-tested; deployments/vpn-lab.json records
+its exact source and the separate server/client acceptance boundaries.
 
 The integration cannot enable repository-wide Dependabot alerts or secret
 scanning/push protection: GitHub returned "Resource not accessible by integration"
@@ -42,7 +42,38 @@ The installer-created `vpn-desk` account is a local client-machine service
 account for privilege dropping. It is not the remote VPN login account.
 The desktop firewall candidate is not a VPS firewall migration.
 
-## Current staged-access acceptance (27 October 2026)
+## Current owned-client and private-DNS acceptance (27 October 2026)
+
+Runtime source `b9917442c0d342d7bab2eb01e4d80e6e81ba7e01` passed all four
+[main functional jobs](https://github.com/efrgdgr0024345/vpn/actions/runs/40447778288),
+including 171 unit tests per Ubuntu job, real kernel/UI/IPC, SSH/SFTP and VPN
+integration. [Main CodeQL analysis](https://github.com/efrgdgr0024345/vpn/actions/runs/40447778310)
+reported zero findings after reviewed issues were fixed without suppression.
+PR dependency review and weekly GitHub Actions update proposals complement it;
+owner-only repository security settings remain separately pending.
+
+[Gated installation](https://github.com/efrgdgr0024345/vpn/actions/runs/40447778025)
+deployed that source and preserved the existing credentials/device identities.
+[Live acceptance](https://github.com/efrgdgr0024345/vpn/actions/runs/40447890007)
+passed authentication, exclusivity, token, revocation, lease expiry and both
+private resolver and encrypted/NAT DNS packet checks. After the
+[reboot](https://github.com/efrgdgr0024345/vpn/actions/runs/40448105690),
+[inventory](https://github.com/efrgdgr0024345/vpn/actions/runs/40448251641)
+at 67 seconds uptime confirmed VPN, broker and Unbound running, with both
+persistent firewall tables and 18 rules.
+
+[Post-boot live acceptance](https://github.com/efrgdgr0024345/vpn/actions/runs/40448325728)
+passed all authentication, token, forwarding and private-DNS checks again.
+[External UDP probe](https://github.com/efrgdgr0024345/vpn/actions/runs/40448467493)
+confirmed the VPN transport remains reachable after reboot.
+
+The owned Kali app is ready for a controlled installation/connection test. DEVICE_TESTING.md and
+vpn-dashboard/INSTALL.md cover the next owner steps. No phone app or client
+early-boot enforcement is implemented, and physical leak/transition behavior is
+unverified. The older evidence below is historical; the JSON deployment record
+and this current section take precedence.
+
+## Previous staged-access acceptance (27 October 2026)
 
 The selected system is implemented and deployed at runtime commit
 `f7de4dd1629c827e92c1573ba5d1d26153202cf1`. It uses one tunnel, separately
@@ -180,7 +211,7 @@ hardened ZIP     08ceef746a40ad0e2d2576b51fca018713664eb5200fd4803e8a4209f554e56
 installer ZIP    2f2d573e67c1053b7b4bab5f46daf1037274735e8e56288b791bae00b67d8ab6
 ```
 
-## Findings and remaining blockers
+## Earlier audit findings and blockers (historical snapshot)
 
 1. **Client certificate-name compatibility bug: fixed locally.** The audit
    reproduced rejection of `OpenVPN Server` because the validator treated a

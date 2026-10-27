@@ -35,7 +35,8 @@ cannot run rather than silently skipping validation.
 on pushes, PRs, manual dispatch and weekly. Medium/higher security-severity and
 error-level findings fail the scan. Controlled rule/location summaries expose
 findings without copying raw runtime data. PR dependency changes get GitHub's
-dependency review. These jobs have no lab environment or private SSH/profile data.
+dependency review, and weekly Dependabot proposals track pinned GitHub Actions.
+These jobs have no lab environment or private SSH/profile data.
 
 Both functional and security workflows must succeed for the exact source commit
 before gated lab mutations receive the environment SSH secret. Scans are useful

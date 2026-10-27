@@ -1,5 +1,40 @@
 # Security hardening implemented
 
+## Owned-client follow-up review, 27 October 2026
+
+The reviewed runtime source is `b9917442c0d342d7bab2eb01e4d80e6e81ba7e01`.
+[GitHub CodeQL security-and-quality](https://github.com/efrgdgr0024345/vpn/actions/runs/40447460637)
+completed with zero findings after the reported file-mode, unused-import,
+resource-lifetime and expected-exception findings were fixed without query
+suppression. [Functional validation](https://github.com/efrgdgr0024345/vpn/actions/runs/40447460753)
+passed all four jobs, including 171 unit tests per Ubuntu job, real kernel/UI,
+SSH/SFTP and VPN/PAM/DNS/session tests. This is automated review evidence, not
+proof of security or validation of the whole upstream engine/OS.
+
+The owned app adds authenticated local session control, bounded secret-free
+events, owned-child process-descriptor signaling, runtime guard/resolver setup,
+explicit restoration and a public-code installation audit. The server adds a
+private recursive resolver. Architecture, limitations and exact deployment
+records are in OWNED_CLIENT.md and deployments/vpn-lab.json.
+
+The client guard is not installed as an early-boot policy. Physical Kali
+installation, DNS/IPv6 containment and transition behavior remain acceptance
+work. Native phone apps are not implemented. Root compromise can replace local
+code, policy, manifests and logs; independent source/hash retention is required.
+The profile import does not delete the owner's original home-directory key copy.
+After verifying the protected import, remove unnecessary plaintext export copies
+or move backups to separately protected offline storage; mode 0600 does not stop
+malware running as that same user. No automatic personal-file deletion occurs.
+
+Both exact-commit functional and CodeQL checks gate lab mutations. Weekly
+Dependabot update proposals track GitHub Actions; PR dependency review checks
+recognized dependency changes. These do not audit Debian packages or every
+transitive upstream dependency. GitHub returned 403 for owner-only security
+setting changes: repository-wide Dependabot alerts, secret scanning and push
+protection must be enabled/verified by the owner separately.
+
+## Earlier client hardening
+
 This describes client-side code, not changes to the live Access Server VPS.
 The follow-up audit in [PROJECT_STATUS.md](PROJECT_STATUS.md) records the certificate-name
 compatibility findings, their fixes, and publication of the isolated test branch.
