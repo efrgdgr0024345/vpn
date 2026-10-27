@@ -96,13 +96,23 @@ def export_file(path,value,uid,gid):
         Path(temporary).unlink(missing_ok=True)
 
 
-def configure(value,configuration=Path('/etc/ssh/sshd_config'),reload_service=True):
+def configure(value,configuration=Path('/etc/ssh/sshd_config'),reload_service=True,device='kali'):
     if os.geteuid()!=0:
         raise server.SetupError('Download enrollment requires local lab root.')
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     public,fingerprint=public_key(value)
-    profile=server.read_owned(server.EXPORT/'client.ovpn')
-    login=server.read_owned(server.EXPORT/'login.txt')
+    if device not in ('kali','iphone','android'):
+        raise server.SetupError('Select a registered device.')
+    source=server.EXPORT/'devices'/device
+    # Old foundation exports are accepted only for the original Kali device.
+    if device=='kali' and not source.exists():
+        source=server.EXPORT
+    if (server.CONFIG/'devices.json').exists():
+        registry=json.loads(server.read_owned(server.CONFIG/'devices.json'))
+        if not registry.get(device,{}).get('enabled'):
+            raise server.SetupError('The selected device is disabled.')
+    profile=server.read_owned(source/'client.ovpn')
+    login=server.read_owned(source/'login.txt')
     if len(login.splitlines())!=2 or login.splitlines()[0]!=server.CLIENT:
         raise server.SetupError('Protected VPN credentials are not ready.')
     try:
@@ -177,7 +187,8 @@ def revoke():
 
 if __name__=='__main__':
     try:
-        result=revoke() if globals().get('REVOKE_DOWNLOAD') is True else configure(globals().get('DOWNLOAD_PUBLIC_KEY',''))
+        result=revoke() if globals().get('REVOKE_DOWNLOAD') is True else configure(
+            globals().get('DOWNLOAD_PUBLIC_KEY',''),device=globals().get('DOWNLOAD_DEVICE','kali'))
         print(json.dumps(result,sort_keys=True))
     except (server.SetupError,OSError,ValueError,KeyError,subprocess.SubprocessError):
         print(json.dumps({'error':'setup_failed','detail':'Read-only download enrollment failed.'}))

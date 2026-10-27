@@ -97,6 +97,18 @@ X11Forwarding no
     shell=subprocess.run(['/usr/bin/ssh',*options,'-T',target,'id -u'],capture_output=True,timeout=10)
     if shell.stdout.strip().isdigit():
         raise SystemExit('Download key obtained a shell.')
+    # The fixed device selector must export that identity, never silently reuse
+    # the desktop profile. Contents here are public test fixtures, not keys.
+    android=server_foundation.EXPORT/'devices/android'
+    server_foundation.directory(android,0o700)
+    server_foundation.write(android/'client.ovpn','android fixture profile\n')
+    server_foundation.write(android/'login.txt','vpn-lab-client\n'+'y'*43+'\n')
+    configure_download.configure(private.with_suffix('.pub').read_text(),configuration,False,device='android')
+    os.kill(int(Path('/run/vpn-lab-test-sshd.pid').read_text()),1)
+    time.sleep(.5)
+    selected=sftp('get /files/client.ovpn /run/android-profile\n')
+    if selected.returncode or Path('/run/android-profile').read_text()!='android fixture profile\n':
+        raise SystemExit('Download did not select the separate mobile identity.')
     configure_download.revoke()
     if sftp('get /files/client.ovpn /run/after-revoke\n').returncode==0 or Path('/run/after-revoke').exists():
         raise SystemExit('Revoked download key was accepted.')

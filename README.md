@@ -6,10 +6,12 @@ See [server setup](SERVER_SETUP.md), [workflow administration](GITHUB_LAB.md),
 [third-party notices](THIRD_PARTY_NOTICES.md) and
 [current evidence/status](PROJECT_STATUS.md).
 
-The lab foundation provides one certificate-and-password VPN account, a
-single-session limit, modern TLS and default-drop forwarding rules. The
-restricted bootstrap broker and automated handoff remain a separate stage in
-[the design proposal](NEW_VPN_DESIGN.md).
+The lab source now includes [single-tunnel staged access](STAGED_ACCESS.md):
+separately enrolled Kali/iPhone/Android identities, one main session across the
+account, standard hidden OpenVPN session tokens and an expiring kernel forwarding
+grant. See the deployment record for what has actually been deployed; physical
+phone and Kali validation remains separate. [Mobile support](MOBILE_SUPPORT.md)
+records the selected client approach and its limits.
 
 A local Linux desktop dashboard for read-only network diagnostics and explicit
 terminal-authenticated OpenVPN startup. The application is in
@@ -43,8 +45,8 @@ has no production deployment or production credentials.
 
 [GitHub lab administration](GITHUB_LAB.md) describes the separate manual SSH
 connectivity/inventory workflow and its dedicated, expiring lab key. This does
-include a [Debian 13 server foundation](SERVER_SETUP.md). The staged-login broker
-remains a separate implementation stage. Third-party attribution is recorded in
+include a [Debian 13 server foundation](SERVER_SETUP.md) and the staged-access
+broker. Third-party attribution is recorded in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 The proposed next system is described in [NEW_VPN_DESIGN.md](NEW_VPN_DESIGN.md).

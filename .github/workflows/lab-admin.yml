@@ -7,7 +7,7 @@ on:
       operation:
         description: Lab operation (install-foundation changes the disposable server)
         type: choice
-        options: [connectivity, inventory, install-foundation, test-foundation, probe-udp, prepare-download, close-download]
+        options: [connectivity, inventory, install-foundation, test-foundation, probe-udp, prepare-download, close-download, device-status, revoke-device, enable-device, reset-sessions, reboot-lab]
         default: connectivity
       host:
         description: Disposable lab server IPv4 address (public workflow input)
@@ -26,6 +26,11 @@ on:
         description: ED25519 PUBLIC key for prepare-download (never enter a private key)
         required: false
         type: string
+      device:
+        description: Registered device for download, revoke or enable
+        type: choice
+        options: [kali, iphone, android]
+        default: kali
 
 permissions:
   contents: read
@@ -52,7 +57,7 @@ jobs:
 
   verified-build:
     needs: connectivity
-    if: inputs.operation == 'install-foundation' || inputs.operation == 'prepare-download' || inputs.operation == 'close-download'
+    if: inputs.operation == 'install-foundation' || inputs.operation == 'prepare-download' || inputs.operation == 'close-download' || inputs.operation == 'revoke-device' || inputs.operation == 'enable-device' || inputs.operation == 'reset-sessions' || inputs.operation == 'test-foundation' || inputs.operation == 'reboot-lab'
     permissions:
       contents: read
       actions: read
@@ -85,4 +90,5 @@ jobs:
           VPN_LAB_SSH_PRIVATE_KEY: ${{ secrets.VPN_LAB_SSH_PRIVATE_KEY }}
           VPN_LAB_OPERATION: ${{ inputs.operation }}
           VPN_LAB_DOWNLOAD_PUBLIC_KEY: ${{ inputs.download_public_key }}
+          VPN_LAB_DEVICE: ${{ inputs.device }}
         run: /usr/bin/python3 -I -B ci/lab_admin.py "$VPN_LAB_OPERATION"

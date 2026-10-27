@@ -6,10 +6,14 @@ distributed ZIPs. Separate older ChatGPT conversations are not exposed through
 the tools/resources attached to this task. No conversation export or additional
 history file was found in the shared workspace folders.
 
-Current priority: test in GitHub and on separate disposable infrastructure while
-the user continues working through the existing VPN. Production changes are
-paused. New staged-login, password-suffix, sandbox and bootloader development
-also remains paused.
+Current priority: the owner has resumed staged-access development and requested
+GitHub/disposable-server validation before local testing. Add iPhone and Android
+support with one main VPN session across the whole account. The owner selected
+direct device enrollment, one-tunnel staged access and disconnect-before-transfer.
+The broker, kernel lease and separate profiles are now implemented in source
+and undergoing isolated verification; see STAGED_ACCESS.md. The existing Access Server remains outside the deployment
+scope; custom password suffixes, bootloader work and custom cryptography remain
+deferred. Earlier statements that all staged development is paused are historical.
 
 ## Three distinct systems
 
@@ -17,7 +21,7 @@ also remains paused.
 | --- | --- |
 | Existing VPS | The user's console identifies OpenVPN Access Server Appliance 3.2.2 and a root shell. This task has no live connection to that console. |
 | VPN Desk project | A local Linux desktop client/diagnostic prototype, with privileged client helpers and an installer. It is not an Access Server deployment or administration tool. |
-| Proposed new VPN | A design in NEW_VPN_DESIGN.md. No credential broker, restricted bootstrap VPN, device-attestation service, exclusive server lease or two-tunnel handoff is implemented. |
+| New VPN lab | Single-tunnel broker, enrolled certificate pins and exclusive kernel lease are implemented in source. STAGED_ACCESS.md describes the selected behavior; deployments/vpn-lab.json distinguishes deployment evidence from source. No hardware attestation or literal two-tunnel handoff is claimed. |
 
 The installer-created `vpn-desk` account is a local client-machine service
 account for privilege dropping. It is not the remote VPN login account.

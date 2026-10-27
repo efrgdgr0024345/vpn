@@ -117,9 +117,11 @@ table inet vpn_lab {{
    192.168.0.0/16, 198.18.0.0/15, 198.51.100.0/24, 203.0.113.0/24,
    224.0.0.0/4, 240.0.0.0/4 }}
  }}
+ set authorized {{ type ipv4_addr; flags timeout; timeout 20s; size 1; }}
  chain input {{
   type filter hook input priority 0; policy drop;
   iifname "lo" accept
+  iifname "tun-lab" counter drop comment "vpn-lab-block-host"
   ct state invalid drop
   ct state established,related accept
   iifname "{interface}" tcp dport {ssh_port} accept
@@ -134,8 +136,8 @@ table inet vpn_lab {{
   ct state invalid drop
   iifname "tun-lab" meta nfproto ipv6 counter drop comment "vpn-lab-block-ipv6"
   iifname "tun-lab" ip daddr @nonpublic counter drop comment "vpn-lab-block-private"
-  iifname "tun-lab" oifname "{interface}" ip saddr {POOL} ct state new,established,related counter accept
-  iifname "{interface}" oifname "tun-lab" ip daddr {POOL} ct state established,related counter accept
+  iifname "tun-lab" oifname "{interface}" ip saddr @authorized ct state new,established,related counter accept
+  iifname "{interface}" oifname "tun-lab" ip daddr @authorized ct state established,related counter accept
  }}
  chain output {{ type filter hook output priority 0; policy accept; }}
 }}
@@ -164,15 +166,19 @@ dh none
 tls-crypt {CONFIG}/tls-crypt.key
 crl-verify /etc/openvpn/server/vpn-lab-crl.pem
 remote-cert-tls client
-verify-x509-name {CLIENT} name
 verify-client-cert require
 plugin {plugin} vpn-lab
+management /run/openvpn-server/vpn-lab.management unix
+management-client-user root
+management-client-auth
+management-hold
+management-signal
 tls-version-min 1.3
 data-ciphers AES-256-GCM:AES-128-GCM:CHACHA20-POLY1305
 allow-compression no
 auth SHA256
-auth-gen-token 900
-reneg-sec 300
+auth-gen-token 86400 120
+reneg-sec 120
 max-clients 1
 keepalive 10 60
 persist-key
@@ -187,10 +193,10 @@ verb 3
 '''
 
 
-def client_configuration(endpoint):
+def client_configuration(endpoint, cn=CLIENT, portable=False):
     validate(endpoint, 22, 'eth0')
     lines = f'''client
-dev tun0
+dev {'tun' if portable else 'tun0'}
 proto udp
 remote {endpoint} 1194
 nobind
@@ -206,14 +212,42 @@ auth-nocache
 mssfix 1300
 verb 3
 '''
-    for name, path in (('ca', PKI/'ca.crt'), ('cert', PKI/'issued'/f'{CLIENT}.crt'),
-                       ('key', PKI/'private'/f'{CLIENT}.key'), ('tls-crypt', CONFIG/'tls-crypt.key')):
+    for name, path in (('ca', PKI/'ca.crt'), ('cert', PKI/'issued'/f'{cn}.crt'),
+                       ('key', PKI/'private'/f'{cn}.key'), ('tls-crypt', CONFIG/'tls-crypt.key')):
         value = read_owned(path)
         if name in ('ca', 'cert'):
             begin, end = '-----BEGIN CERTIFICATE-----', '-----END CERTIFICATE-----'
             value = value[value.index(begin):value.index(end)+len(end)]
         lines += '<'+name+'>\n'+value.strip()+'\n</'+name+'>\n'
     return lines
+
+
+def enroll_devices(endpoint):
+    """Administrator-only enrollment; never reachable through VPN credentials."""
+    target = CONFIG/'devices.json'
+    previous = json.loads(read_owned(target)) if target.exists() else {}
+    devices = {}
+    for index, name in enumerate(('kali', 'iphone', 'android')):
+        cn = CLIENT if name == 'kali' else 'vpn-lab-'+name
+        cert = PKI/'issued'/f'{cn}.crt'
+        if not cert.exists():
+            easyrsa('build-client-full', cn, 'nopass')
+        run(['/usr/bin/openssl','verify','-CAfile',str(PKI/'ca.crt'),'-purpose','sslclient',str(cert)])
+        fingerprint = run(['/usr/bin/openssl','x509','-in',str(cert),'-noout','-fingerprint','-sha256'])
+        digest = fingerprint.strip().split('=',1)[-1].replace(':','').lower()
+        if not re.fullmatch(r'[0-9a-f]{64}', digest):
+            raise SetupError('Invalid enrolled certificate fingerprint.')
+        device = {'cn':cn,'sha256':digest,'address':'172.27.240.'+str(10+index),
+                  'enabled':previous.get(name,{}).get('enabled',True)}
+        if name in previous and any(previous[name].get(k)!=device[k] for k in ('cn','sha256','address')):
+            raise SetupError('Existing device identity differs; review replacement explicitly.')
+        devices[name] = device
+        destination = EXPORT/'devices'/name
+        directory(destination,0o700)
+        write(destination/'client.ovpn',client_configuration(endpoint,cn,portable=name!='kali'))
+        write(destination/'login.txt',read_owned(EXPORT/'login.txt'))
+    write(target,json.dumps(devices,sort_keys=True)+'\n')
+    return devices
 
 
 def account(name):
@@ -423,6 +457,11 @@ account required pam_unix.so
         write('/etc/openvpn/server/vpn-lab.conf',server_configuration(candidates[0]))
         write('/etc/openvpn/server/vpn-lab-crl.pem',read_owned(PKI/'crl.pem'),0o644)
         write(EXPORT/'client.ovpn',client_configuration(endpoint))
+        enroll_devices(endpoint)
+        broker=globals().get('BROKER_SOURCE')
+        if not broker:
+            broker=read_owned(Path(__file__).resolve().with_name('session_broker.py'))
+        write('/usr/local/libexec/vpn-lab/session_broker.py',broker,0o644)
         selftest=globals().get('SELFTEST_SOURCE')
         if not selftest:
             candidate=Path(__file__).resolve().with_name('server_selftest.py')
@@ -462,7 +501,11 @@ net.ipv4.conf.default.accept_source_route=0
 net.ipv6.conf.all.forwarding=0
 ''',0o644)
             run(['/usr/sbin/sysctl','-p','/etc/sysctl.d/70-vpn-lab.conf'])
-            write('/etc/systemd/system/openvpn-server@vpn-lab.service.d/hardening.conf','''[Service]
+            write('/etc/systemd/system/openvpn-server@vpn-lab.service.d/hardening.conf','''[Unit]
+Wants=vpn-lab-broker.service
+After=nftables.service
+
+[Service]
 Restart=on-failure
 RestartSec=3s
 NoNewPrivileges=yes
@@ -480,8 +523,39 @@ RestrictRealtime=yes
 LimitCORE=0
 UMask=0077
 ''',0o644)
+            write('/etc/systemd/system/vpn-lab-broker.service','''[Unit]
+Description=Single-session VPN authorization broker
+After=nftables.service
+PartOf=openvpn-server@vpn-lab.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -I -B /usr/local/libexec/vpn-lab/session_broker.py
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=vpn-lab-control
+RuntimeDirectoryMode=0700
+UMask=0077
+LimitCORE=0
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/run/vpn-lab-control
+CapabilityBoundingSet=CAP_NET_ADMIN
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
+''',0o644)
             run(['/usr/bin/systemctl','daemon-reload'])
-            run(['/usr/bin/systemctl','enable','nftables.service','openvpn-server@vpn-lab.service'])
+            run(['/usr/bin/systemctl','enable','nftables.service','vpn-lab-broker.service','openvpn-server@vpn-lab.service'])
             run(['/usr/bin/systemctl','restart','openvpn-server@vpn-lab.service'])
             run(['/usr/bin/systemctl','is-active','--quiet','openvpn-server@vpn-lab.service'])
         revision=globals().get('DEPLOYED_REVISION','local-test')
@@ -491,7 +565,7 @@ UMask=0077
                 'vpn_udp_port':1194,'recovery_ssh_port':ssh_port,
                 'max_clients':1,'required_factors':['client certificate','PAM password'],
                 'retired_runner_services':retired,'client_profile':str(EXPORT/'client.ovpn'),
-                'credential_file':str(login),'staged_login_implemented':False,'source_commit':revision}
+                'credential_file':str(login),'staged_login_implemented':True,'source_commit':revision}
 
 
 def main():

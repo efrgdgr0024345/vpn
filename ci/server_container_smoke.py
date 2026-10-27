@@ -33,9 +33,12 @@ def main():
         raise SystemExit('Installer rerun changed existing client credentials.')
     foundation.run(['/usr/sbin/ip','route','replace','9.9.9.9/32','via',sys.argv[1]])
     log=Path('/run/vpn-server-test.log')
+    Path('/run/openvpn-server').mkdir(mode=0o700,exist_ok=True)
     with open(log,'wb') as output:
         os.chmod(log,0o600)
         server=subprocess.Popen(['/usr/sbin/openvpn','--config','/etc/openvpn/server/vpn-lab.conf'],
+                                stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+        broker=subprocess.Popen(['/usr/bin/python3','-I','-B','/test/ops/session_broker.py'],
                                 stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
         try:
             end=time.monotonic()+15
@@ -47,8 +50,11 @@ def main():
                 time.sleep(.1)
             else:
                 raise RuntimeError('OpenVPN server initialization timed out.')
-            print(json.dumps(server_selftest.test(),sort_keys=True),flush=True)
+            print(json.dumps(server_selftest.test(broker.pid),sort_keys=True),flush=True)
         finally:
+            if broker.poll() is None:
+                os.killpg(broker.pid,signal.SIGTERM)
+                broker.wait(timeout=5)
             if server.poll() is None:
                 os.killpg(server.pid,signal.SIGTERM)
                 server.wait(timeout=10)

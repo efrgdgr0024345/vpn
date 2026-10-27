@@ -25,7 +25,7 @@ SETTINGS = {'VPN_LAB_HOST': '192.0.2.10', 'VPN_LAB_PORT': '22',
             'VPN_LAB_HOST_FINGERPRINT': FINGERPRINT}
 SCAN = '192.0.2.10 ssh-ed25519 ' + BLOB + '\n'
 KEY = '-----BEGIN OPENSSH PRIVATE KEY-----\nTEST FIXTURE ONLY\n-----END OPENSSH PRIVATE KEY-----'
-REPORT = {'os': {'ID': 'debian'}, 'kernel': 'fixture', 'root_free_bytes': 1024,
+REPORT = {'os': {'ID': 'debian'}, 'kernel': 'fixture', 'root_free_bytes': 1024,'uptime_seconds': 100,
           'running_service_units': [], 'listening_ports': [],
           'candidate_vpn_subnet_overlaps_existing_route': False,
           'firewall_summary': None, 'tools': {}}

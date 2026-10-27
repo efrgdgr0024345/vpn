@@ -70,7 +70,10 @@ if firewall is not None:
     except (ValueError, KeyError, TypeError):
         pass
 disk = shutil.disk_usage('/')
+with open('/proc/uptime') as stream:
+    uptime_seconds=int(float(stream.read().split()[0]))
 report = {'os':release, 'kernel':platform.release(), 'root_free_bytes':disk.free,
+          'uptime_seconds':uptime_seconds,
           'running_service_units':None if services is None else sorted(
               line.split()[0] for line in services.splitlines() if line.split()),
           'listening_ports':sorted(listeners),
@@ -167,7 +170,8 @@ def private_file(path, contents):
 
 def execute(operation, environment, run=bounded_run):
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
-    if operation not in ('connectivity', 'inventory', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download'):
+    if operation not in ('connectivity', 'inventory', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download',
+                         'device-status','revoke-device','enable-device','reset-sessions','reboot-lab'):
         raise LabError('Unsupported lab operation.')
     host, port, fingerprint = settings(environment)
     known = verified_host(host, port, fingerprint, run)
@@ -178,6 +182,12 @@ def execute(operation, environment, run=bounded_run):
     remote_command='/usr/bin/python3 -I -B -'
     timeout=65
     probe=None
+    device=environment.get('VPN_LAB_DEVICE','kali')
+    if device not in ('kali','iphone','android'):
+        raise LabError('Select a fixed registered device name.')
+    if operation in ('device-status','revoke-device','enable-device','reset-sessions','reboot-lab'):
+        program=('DEVICE_OPERATION = '+repr(operation)+'\nDEVICE_NAME = '+repr(device)+'\n'
+                 +(ROOT/'ops/device_admin.py').read_text())
     if operation=='probe-udp':
         probe=b'VPN-LAB-PROBE-v1:'+secrets.token_hex(16).encode()
         program='PROBE = '+repr(probe)+'\n'+UDP_PROBE
@@ -188,7 +198,9 @@ def execute(operation, environment, run=bounded_run):
         if revision!='local-test' and not re.fullmatch(r'[0-9a-f]{40}',revision):
             raise LabError('Invalid deployment revision.')
         foundation=(ROOT/'ops/server_foundation.py').read_text()
+        broker=(ROOT/'ops/session_broker.py').read_text()
         program=('SELFTEST_SOURCE = '+repr(selftest)+'\nNOTICES_SOURCE = '+repr(notices)
+                 +'\nBROKER_SOURCE = '+repr(broker)
                  +'\nDEPLOYED_REVISION = '+repr(revision)+'\n'
                  +'FOUNDATION_SOURCE = '+repr(foundation)+'\n'+foundation)
         # Both values are validated numeric/literal-IP strings, never shell input.
@@ -196,7 +208,7 @@ def execute(operation, environment, run=bounded_run):
         timeout=1500
     elif operation=='test-foundation':
         program=(ROOT/'ops/server_selftest.py').read_text()
-        timeout=130
+        timeout=240
     elif operation=='prepare-download':
         value=environment.get('VPN_LAB_DOWNLOAD_PUBLIC_KEY','').strip()
         fields=value.split()
@@ -209,7 +221,8 @@ def execute(operation, environment, run=bounded_run):
         if len(wire)!=51 or wire[:19]!=b'\0\0\0\x0bssh-ed25519\0\0\0\x20':
             raise LabError('Invalid ED25519 public key.')
         value='ssh-ed25519 '+fields[1]+' vpn-lab-download'
-        program='DOWNLOAD_PUBLIC_KEY = '+repr(value)+'\n'+(ROOT/'ops/configure_download.py').read_text()
+        program=('DOWNLOAD_PUBLIC_KEY = '+repr(value)+'\nDOWNLOAD_DEVICE = '+repr(device)+'\n'
+                 +(ROOT/'ops/configure_download.py').read_text())
     elif operation=='close-download':
         program='REVOKE_DOWNLOAD = True\n'+(ROOT/'ops/configure_download.py').read_text()
     secret = environment.get('VPN_LAB_SSH_PRIVATE_KEY', '').strip().replace('\r\n', '\n')
@@ -263,7 +276,7 @@ def execute(operation, environment, run=bounded_run):
             report = json.loads(result.stdout)
         except ValueError:
             raise LabError('Inventory returned unsupported output; raw output withheld.') from None
-        expected = {'os', 'kernel', 'root_free_bytes', 'running_service_units', 'listening_ports',
+        expected = {'os', 'kernel', 'root_free_bytes','uptime_seconds', 'running_service_units', 'listening_ports',
                     'candidate_vpn_subnet_overlaps_existing_route', 'firewall_summary', 'tools'}
         if operation=='install-foundation':
             expected={'version','server_service_active','vpn_udp_port','recovery_ssh_port','max_clients',
@@ -273,6 +286,10 @@ def execute(operation, environment, run=bounded_run):
             expected={'correct_credentials_connect','wrong_password_rejected',
                       'ipv4_dns_roundtrip_through_vpn_and_nat','metadata_private_network_packet_dropped',
                       'client_ipv6_block_response_observed','second_connection_rejected_without_displacing_first',
+                      'unapproved_device_rejected','session_token_reauthentication',
+                      'kernel_lease_expires_when_broker_frozen','ownership_transfers_between_devices',
+                      'device_revocation_denies_forwarding',
+                      'replayed_session_token_denied',
                       'host_routes_and_resolver_modified','credentials_exported'}
         elif operation=='probe-udp':
             expected={'public_udp_1194_received'}
@@ -281,6 +298,8 @@ def execute(operation, environment, run=bounded_run):
                       'read_only','shell_access','credential_contents_returned'}
         elif operation=='close-download':
             expected={'new_download_access_closed','private_export_copies_removed'}
+        elif operation in ('device-status','revoke-device','enable-device','reset-sessions','reboot-lab'):
+            expected={'devices','session_reset','reboot_scheduled','credential_contents_returned'}
         if not isinstance(report, dict) or set(report) != expected:
             raise LabError('Inventory returned unexpected fields; raw output withheld.')
         if environment.get('GITHUB_ACTIONS') == 'true':

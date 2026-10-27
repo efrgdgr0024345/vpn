@@ -12,12 +12,17 @@ lab droplet. The working Access Server is outside this workflow's scope.
 | `install-foundation` | Provision the disposable Debian 13 OpenVPN foundation, replacing its firewall and retiring old runner services. |
 | `test-foundation` | Test the running VPN locally without exporting its credentials or changing host routes/DNS. |
 | `probe-udp` | Send a random non-secret UDP probe from the GitHub runner and observe its arrival on the lab's external interface. No VPN credentials are exported. |
-| `prepare-download` | Authorize a supplied public key for a 24-hour, read-only, chrooted SFTP view of the two client files. No shell or forwarding. |
+| `prepare-download` | Authorize a supplied public key for a 24-hour, read-only, chrooted SFTP view of the selected device's two client files. No shell or forwarding. |
 | `close-download` | Remove the download key and private export copies, preventing new download logins. |
+| `device-status` | Public enrollment fingerprints and enabled flags; no private credentials. |
+| `revoke-device`, `enable-device` | Disable or explicitly reenable one existing enrolled identity. |
+| `reset-sessions` | Deny forwarding, then restart the VPN and broker with fresh session-token state. |
+| `reboot-lab` | Schedule a disposable-server reboot after ten seconds so the workflow can report first. |
 
 There is no arbitrary command input or automatic production deployment.
 SERVER_SETUP.md documents the explicitly selected installation/test operations.
-The staged-login broker remains subsequent work.
+STAGED_ACCESS.md describes the selected one-tunnel authorization broker. All
+mutations and the disruptive packet test require successful matching-commit CI.
 
 ## One-time GitHub environment setup
 
@@ -101,9 +106,12 @@ enabled. The existing 109-test desktop suite, Xvfb and nft checks remain separat
 The SSH integration also checks a separate chrooted SFTP account: selected-file
 download succeeds, parent files cannot be read, file mutations and shells are
 denied, revocation closes new logins, and root administration remains available.
-The gate/download safeguards bring the current lab unit suite to 26 tests.
+The earlier gate/download milestone had 26 lab unit tests. Broker and device
+administration tests now extend that suite.
 
 Local tests and [GitHub-hosted validation](https://github.com/efrgdgr0024345/vpn/actions/runs/40166128639)
 pass. The [initial connectivity run](https://github.com/efrgdgr0024345/vpn/actions/runs/40166246400)
 reached the actual lab droplet and verified the provider-console host fingerprint.
-Actual SSH authentication/inventory still awaits the environment-secret step.
+Actual SSH authentication and installation subsequently succeeded, and fresh
+[inventory 40428981258](https://github.com/efrgdgr0024345/vpn/actions/runs/40428981258)
+confirmed administrative access at the start of staged-access implementation.

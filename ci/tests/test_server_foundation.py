@@ -48,7 +48,8 @@ class FoundationTests(unittest.TestCase):
         configuration=server.server_configuration('/usr/lib/x86_64-linux-gnu/openvpn/plugins/openvpn-plugin-auth-pam.so')
         self.assertIn('verify-client-cert require\n',configuration)
         self.assertIn('max-clients 1\n',configuration)
-        self.assertIn('verify-x509-name vpn-lab-client name\n',configuration)
+        self.assertIn('management-client-auth\n',configuration)
+        self.assertIn('management-client-user root\n',configuration)
         self.assertNotIn('duplicate-cn',configuration)
         self.assertNotIn('client-cert-not-required',configuration)
 

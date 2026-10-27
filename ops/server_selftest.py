@@ -8,6 +8,7 @@ import resource
 import secrets
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import tempfile
@@ -58,13 +59,48 @@ def private_counter():
     raise TestFailure('Private-network firewall rule is missing.')
 
 
-def test():
+def read_private(path):
+    fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    with os.fdopen(fd,'r') as stream:
+        info=os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077:
+            raise TestFailure('Unsafe protected test file.')
+        value=stream.read(2_000_001)
+        if len(value)>2_000_000:
+            raise TestFailure('Oversized protected test file.')
+        return value
+
+
+def update_registry(value):
+    target=Path('/etc/openvpn/lab/devices.json')
+    read_private(target)
+    fd,name=tempfile.mkstemp(prefix='.test-policy-',dir=target.parent)
+    try:
+        with os.fdopen(fd,'w') as stream:
+            os.fchmod(stream.fileno(),0o600)
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name,target)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
+def test(broker_pid=None):
     if os.geteuid()!=0:
         raise TestFailure('Self-test requires local root on the lab server.')
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     os.umask(0o077)
-    profile=Path('/root/vpn-lab/client.ovpn').read_text()
-    login=Path('/root/vpn-lab/login.txt').read_text()
+    profile=read_private('/root/vpn-lab/client.ovpn')
+    login=read_private('/root/vpn-lab/login.txt')
+    policy_before=read_private('/etc/openvpn/lab/devices.json')
+    if not all(json.loads(policy_before).get(name,{}).get('enabled') for name in ('kali','iphone','android')):
+        raise TestFailure('All three lab test identities must be enabled before this disruptive self-test.')
+    if broker_pid is None:
+        value=command(['/usr/bin/systemctl','show','vpn-lab-broker.service','--property=MainPID','--value']).strip()
+        if not value.isdigit() or int(value)<=1:
+            raise TestFailure('Authorization broker is not running.')
+        broker_pid=int(value)
     values=login.splitlines()
     if len(values)!=2 or values[0]!='vpn-lab-client':
         raise TestFailure('Protected local test credentials are invalid.')
@@ -73,6 +109,7 @@ def test():
     profile=re.sub(r'^remote .*$', 'remote 127.0.0.1 1194', profile, flags=re.M)
     processes=[]
     files=[]
+    managers=[]
     def stop(process):
         if process.poll() is None:
             os.killpg(process.pid,signal.SIGTERM)
@@ -83,23 +120,43 @@ def test():
                 process.wait()
     with tempfile.TemporaryDirectory(prefix='vpn-lab-test-',dir='/run') as directory:
         root=Path(directory)
-        def start(name,password):
+        def start(name,password,device='kali'):
+            selected=profile if device=='kali' else read_private('/root/vpn-lab/devices/'+device+'/client.ovpn')
+            selected=re.sub(r'^remote .*$', 'remote 127.0.0.1 1194', selected, flags=re.M)
             config,auth,log=root/(name+'.ovpn'),root/(name+'.auth'),root/(name+'.log')
-            for path,value in ((config,profile),(auth,values[0]+'\n'+password+'\n')):
+            for path,value in ((config,selected),(auth,values[0]+'\n'+password+'\n')):
                 fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
                 with os.fdopen(fd,'w') as stream:
                     stream.write(value)
             output=open(log,'wb')
             os.chmod(log,0o600)
             files.append(output)
+            extra=[]
+            if name=='lab-check':
+                extra=['--management',str(root/'token-observer'),'unix','--management-client-user','root']
             process=subprocess.Popen(['/usr/sbin/openvpn','--config',str(config),
                  '--auth-user-pass',str(auth),'--auth-nocache','--dev','tun-'+name,
                  '--dev-type','tun','--ifconfig-noexec','--route-noexec',
                  '--connect-retry','1','--connect-timeout','5','--connect-retry-max','1',
                  '--user','vpn-lab-transport','--group','vpn-lab-transport',
-                 '--script-security','1'],stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,
+                 '--reneg-sec','5',
+                 '--script-security','1']+extra,stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,
                  start_new_session=True,env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LC_ALL':'C'})
             processes.append(process)
+            if extra:
+                observer=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+                observer.settimeout(.2)
+                end=time.monotonic()+3
+                while True:
+                    try:
+                        observer.connect(str(root/'token-observer'))
+                        break
+                    except (FileNotFoundError,ConnectionRefusedError):
+                        if time.monotonic()>=end:
+                            observer.close()
+                            raise TestFailure('Local token observer did not start.')
+                        time.sleep(.05)
+                managers.append(observer)
             return process,log
         def initialized(process,log,seconds):
             end=time.monotonic()+seconds
@@ -117,9 +174,41 @@ def test():
             stop(bad)
             if 'AUTH_FAILED' not in badlog.read_text(errors='replace'):
                 raise TestFailure('Wrong-password rejection was not observed.')
+            changed=json.loads(policy_before)
+            changed['android']['sha256']='0'*64
+            update_registry(json.dumps(changed)+'\n')
+            try:
+                time.sleep(1.2)
+                denied,deniedlog=start('lab-unapproved',values[1],'android')
+                if initialized(denied,deniedlog,12):
+                    raise TestFailure('An unapproved certificate pin obtained access.')
+                stop(denied)
+                if 'AUTH_FAILED' not in deniedlog.read_text(errors='replace'):
+                    raise TestFailure('Unapproved-device denial was not observed.')
+            finally:
+                update_registry(policy_before)
+            time.sleep(1.2)
             good,goodlog=start('lab-check',values[1])
             if not initialized(good,goodlog,20):
                 raise TestFailure('The local valid-credential VPN handshake failed.')
+            observed=b''
+            token=None
+            end=time.monotonic()+3
+            while time.monotonic()<end:
+                try:
+                    observed+=managers[0].recv(4096)
+                except socket.timeout:
+                    continue
+                if len(observed)>32768:
+                    raise TestFailure('Local token observer overflowed.')
+                lines=observed.split(b'\n')[:-1]
+                candidates=[line.split(b':',2)[-1].strip() for line in lines
+                            if line.startswith(b'>PASSWORD:Auth-Token:')]
+                if candidates:
+                    token=candidates[-1].decode('ascii')
+                    break
+            if not token or not re.fullmatch(r'SESS_ID_AT_[A-Za-z0-9+/=]{40,256}',token):
+                raise TestFailure('A server-issued session token was not observed privately.')
             text=goodlog.read_text(errors='replace')
             match=re.search(r'ifconfig (172\.27\.240\.\d+) 255\.255\.255\.0',text)
             if not match:
@@ -140,12 +229,17 @@ def test():
                     retry=0.0
                     while time.monotonic()<end:
                         if time.monotonic()>=retry:
-                            channel.send(packet)
+                            try:
+                                channel.send(packet)
+                            except OSError:
+                                return False
                             retry=time.monotonic()+1
                         try:
                             reply,address=channel.recvfrom(4096)
                         except socket.timeout:
                             continue
+                        except OSError:
+                            return False
                         if address[2]==socket.PACKET_OUTGOING or not reply or reply[0]>>4!=4:
                             continue
                         offset=(reply[0]&15)*4
@@ -158,6 +252,22 @@ def test():
                     return False
                 if not public_dns():
                     raise TestFailure('DNS roundtrip through VPN forwarding/NAT failed.')
+                # Remove the initial password file and force a real TLS rekey.
+                # Reauthentication must use the server-issued token, not reread
+                # the known password from disk after dropping privileges.
+                (root/'lab-check.auth').unlink()
+                end=time.monotonic()+16
+                while time.monotonic()<end:
+                    text=goodlog.read_text(errors='replace')
+                    if ('TLS: soft reset' in text and text.count('Control Channel:')>=2):
+                        break
+                    if good.poll() is not None:
+                        raise TestFailure('Token-based TLS reauthentication failed.')
+                    time.sleep(.2)
+                else:
+                    raise TestFailure('Token-based TLS reauthentication was not observed.')
+                if not public_dns():
+                    raise TestFailure('Token renewal interrupted authorized packet forwarding.')
                 before=private_counter()
                 channel.send(dns_packet(source,'169.254.169.254',35001,1234))
                 end=time.monotonic()+3
@@ -182,26 +292,81 @@ def test():
                         break
                 if not blocked:
                     raise TestFailure('Client IPv6 block response was not observed.')
-                second,secondlog=start('lab-second',values[1])
+                second,secondlog=start('lab-second',values[1],'iphone')
                 if initialized(second,secondlog,6):
                     raise TestFailure('A second simultaneous client was accepted.')
                 stop(second)
                 if good.poll() is not None or not public_dns():
                     raise TestFailure('A second connection attempt displaced the active session.')
+                # The broker is frozen rather than cleanly stopped: no cleanup
+                # handler can hide a missing kernel timeout. Established flows
+                # must lose access in both directions once the set expires.
+                os.kill(broker_pid,signal.SIGSTOP)
+                try:
+                    time.sleep(22)
+                    if public_dns():
+                        raise TestFailure('Forwarding survived an expired kernel lease.')
+                finally:
+                    os.kill(broker_pid,signal.SIGCONT)
+                # A resumed broker must reject stale queued liveness events.
+                end=time.monotonic()+5
+                while time.monotonic()<end and good.poll() is None:
+                    time.sleep(.1)
+                stop(good)
             finally:
                 channel.close()
+            time.sleep(1)
+            replay,replaylog=start('lab-replay',token)
+            initialized(replay,replaylog,6)
+            # A valid token from a previous CID must never create a new kernel
+            # grant, even if OpenVPN briefly reports transport establishment.
+            elements=json.loads(command(['/usr/sbin/nft','-j','list','set','inet','vpn_lab','authorized']))
+            if any(item.get('set',{}).get('elem') for item in elements['nftables']):
+                raise TestFailure('A replayed session token obtained a forwarding grant.')
+            stop(replay)
+            time.sleep(1)
+            phone,phonelog=start('lab-phone',values[1],'iphone')
+            if not initialized(phone,phonelog,20):
+                raise TestFailure('Ownership could not transfer to the next enrolled device.')
+            text=phonelog.read_text(errors='replace')
+            if 'ifconfig 172.27.240.11 255.255.255.0' not in text:
+                raise TestFailure('The next enrolled device received an unexpected address.')
+            source='172.27.240.11'
+            command(['/usr/sbin/ip','link','set','dev','tun-lab-phone','up'])
+            channel=socket.socket(socket.AF_PACKET,socket.SOCK_RAW,socket.htons(3))
+            try:
+                channel.bind(('tun-lab-phone',0))
+                channel.settimeout(.25)
+                if not public_dns():
+                    raise TestFailure('The new session owner could not forward packets.')
+                changed=json.loads(policy_before)
+                changed['iphone']['enabled']=False
+                update_registry(json.dumps(changed)+'\n')
+                time.sleep(2)
+                if public_dns():
+                    raise TestFailure('A revoked device retained packet forwarding.')
+            finally:
+                channel.close()
+                update_registry(policy_before)
             return {'correct_credentials_connect':True,'wrong_password_rejected':True,
                     'ipv4_dns_roundtrip_through_vpn_and_nat':True,
                     'metadata_private_network_packet_dropped':True,
                     'client_ipv6_block_response_observed':True,
                     'second_connection_rejected_without_displacing_first':True,
+                    'unapproved_device_rejected':True,'session_token_reauthentication':True,
+                    'kernel_lease_expires_when_broker_frozen':True,
+                    'ownership_transfers_between_devices':True,'device_revocation_denies_forwarding':True,
+                    'replayed_session_token_denied':True,
                     'host_routes_and_resolver_modified':False,
                     'credentials_exported':False}
         finally:
+            update_registry(policy_before)
             for process in reversed(processes):
                 stop(process)
             for output in files:
                 output.close()
+            for manager in managers:
+                manager.close()
 
 
 if __name__=='__main__':

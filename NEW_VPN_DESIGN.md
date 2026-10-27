@@ -1,12 +1,26 @@
 # Proposed VPN system: threat model and design
 
-Status: design proposal, not an implemented or deployed VPN server. This document
+## Confirmed requirements and current decision
+
+The owner has resumed staged-access development and requested server-side
+validation before any local Kali testing. iPhone and Android support is now a
+requirement. The limit is **one authorized main VPN session across the entire
+account**, never one per enrolled device. Additional login attempts must not
+replace a healthy owner. Restricted entry is not a second grant of internet
+access.
+
+The owner approved direct enrollment, one tunnel with staged permissions and
+disconnect-before-transfer. Literal dual-tunnel handoff and gateway sharing are
+not selected. See MOBILE_SUPPORT.md and STAGED_ACCESS.md.
+
+Status: original threat-model proposal, with a single-tunnel implementation now
+in development. STAGED_ACCESS.md describes the actual implementation. This document
 captures the critical review and a recommended starting architecture. The current
 desktop prototype and its installer remain separate from this proposed system.
 Custom bootloader work is deferred.
-Lab development now includes the conventional single-account OpenVPN foundation
-in SERVER_SETUP.md. The authorization broker and handoff described here remain
-unimplemented. See PROJECT_STATUS.md for deployment and validation evidence.
+The conventional lab foundation is described in SERVER_SETUP.md. Do not confuse
+the earlier two-tunnel proposal with the selected implementation. See
+PROJECT_STATUS.md and deployments/vpn-lab.json for deployment evidence.
 
 ## The goal
 
