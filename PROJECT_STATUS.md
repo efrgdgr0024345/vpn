@@ -64,6 +64,23 @@ Android app import, roaming, suspend and leak behavior. Further server feature
 work is deferred until those tests. DEVICE_TESTING.md records the next steps;
 the owner's dedicated download public key is needed for private profile transfer.
 
+Follow-up: metadata commit `be9b749cceb296170696ebf2a0ce6ddf56f874ab`
+passed [main CI 40431918542](https://github.com/efrgdgr0024345/vpn/actions/runs/40431918542),
+but [test-branch CI 40431908332](https://github.com/efrgdgr0024345/vpn/actions/runs/40431908332)
+failed in the real VPN container job. Its existing annotation reports only exit
+code 1, and the signed log-download host is unavailable from the controller.
+The reason is not established; do not claim all runs were successful. The
+container harness now emits a bounded, controlled error as a Checks annotation
+so another failure can be diagnosed without exposing private test material.
+The successful deployed/live acceptance record above remains separate evidence.
+
+The owner supplied their dedicated Kali download public key. Gated
+[download enrollment 40433179371](https://github.com/efrgdgr0024345/vpn/actions/runs/40433179371)
+verified the expected public fingerprint and authorized the Kali files through
+the expiring, read-only chroot. The private key remains on Kali. File retrieval
+and grant closure await the owner's confirmation; no VPN connection is inferred
+from enrollment.
+
 ## Reconstructed work history
 
 1. The selected repository initially contained only `README.md` with `# vpn`.

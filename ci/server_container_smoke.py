@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import socket
@@ -62,4 +63,16 @@ def main():
 
 
 if __name__=='__main__':
-    main()
+    try:
+        main()
+    except Exception as exc:
+        # Keep a useful, secret-free diagnostic readable through the Checks API
+        # when the runner's signed log-download host is unavailable. Never dump
+        # subprocess arguments, raw VPN logs or exception locals.
+        detail='Integration infrastructure or cleanup failed.'
+        if isinstance(exc,(server_selftest.TestFailure,foundation.SetupError,RuntimeError)):
+            candidate=str(exc)
+            if re.fullmatch(r'[A-Za-z0-9 ,/_.()\-]{1,180}',candidate):
+                detail=candidate
+        print('::error title=VPN lab integration::'+detail,flush=True)
+        raise SystemExit(1)
