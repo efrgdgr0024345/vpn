@@ -2,8 +2,9 @@
 
 The owner has selected [our own client application](OWNED_CLIENT.md), with local
 controls/logs and reviewable code, rather than a NetworkManager VPN plugin or
-stock VPN frontend. The Kali app has passed automated validation; controlled device acceptance is next;
-native phone apps remain a separate phase. Runtime dependencies and trust limits
+stock VPN frontend. The lab handover fix is deployed and verified after reboot.
+The Kali app has passed automated validation; controlled device acceptance is
+next. Native phone apps remain a separate phase. Runtime dependencies and trust limits
 are explicit. GitHub CodeQL security/quality review now complements functional
 checks; both workflows gate lab mutations for the exact commit.
 

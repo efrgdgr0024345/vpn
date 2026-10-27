@@ -42,6 +42,42 @@ The installer-created `vpn-desk` account is a local client-machine service
 account for privilege dropping. It is not the remote VPN login account.
 The desktop firewall candidate is not a VPS firewall migration.
 
+## Current verified deployment (27 October 2026)
+
+The handover fix is deployed at runtime source
+`8510966a90bab33e7f848f6f8c1c534969d576e3`. Its
+[main CI](https://github.com/efrgdgr0024345/vpn/actions/runs/40451196198) passed
+all four jobs, including 173 unit tests per Ubuntu job, and
+[CodeQL](https://github.com/efrgdgr0024345/vpn/actions/runs/40451196186) reported
+zero findings. These are automated checks, not a certification of the client OS.
+
+The owner renewed the existing expiring SSH grant in the provider root console.
+[Inventory 40500307468](https://github.com/efrgdgr0024345/vpn/actions/runs/40500307468)
+confirmed access restored without replacing the GitHub secret.
+[Gated installation 40500400489](https://github.com/efrgdgr0024345/vpn/actions/runs/40500400489)
+then installed the reviewed source and confirmed the VPN service active.
+After [reboot 40500587276](https://github.com/efrgdgr0024345/vpn/actions/runs/40500587276),
+[inventory 40500752793](https://github.com/efrgdgr0024345/vpn/actions/runs/40500752793)
+at 23 seconds uptime confirmed VPN, broker and Unbound active, plus both
+persistent firewall tables with 18 rules.
+
+[Post-boot live acceptance 40500906651](https://github.com/efrgdgr0024345/vpn/actions/runs/40500906651)
+passed authentication, certificate approval, one-session exclusivity, token
+renewal/replay, lease expiry, revocation, ownership transfer, private DNS and
+packet confinement. The forced disconnected-replay regression confirmed that
+the original broker remained alive throughout the test. Credentials stayed on
+the server and its host routes/resolver were not modified by the self-test.
+[External UDP probe 40501184836](https://github.com/efrgdgr0024345/vpn/actions/runs/40501184836)
+confirmed the VPN transport reachable after reboot.
+
+The next useful evidence is controlled installation and connection testing on
+the actual Kali machine. Start with the read-only installer prerequisite check
+in DEVICE_TESTING.md. The existing downloaded Kali profile/login can be reused;
+no download grant needs reopening. Client early-boot enforcement and owned
+native phone apps remain unimplemented. Physical DNS/IPv6/kill-switch and
+network/suspend behavior remain unverified. GitHub owner security settings and
+Dependency graph enablement remain separately pending verification.
+
 ## Follow-up handover regression
 
 A repeat of the documentation-only `ed315d6` snapshot failed in
@@ -70,14 +106,12 @@ SSH authentication diagnosis and another regression test (173 total unit tests).
 [Gated deployment 40450316823](https://github.com/efrgdgr0024345/vpn/actions/runs/40450316823)
 passed host identity and matching-commit checks, then failed during SSH access.
 [Read-only diagnostic 40450643823](https://github.com/efrgdgr0024345/vpn/actions/runs/40450643823)
-confirmed authentication rejection. The expiring administration grant may need
-renewal; the owner has been given a hash-verified command to renew the existing
-key from the provider root console without replacing the GitHub secret. The
-fix is not claimed deployed. Local VPN connection testing is on hold until the
-updated runtime passes live acceptance. The last verified deployed source and
-completed evidence remain below and in deployments/vpn-lab.json.
+confirmed authentication rejection. That interruption is now resolved: the
+owner renewed the existing grant, the reviewed source installed, and post-boot
+live acceptance passed, as recorded in the current section above. The earlier
+blocked-deployment evidence is retained as history.
 
-## Current owned-client and private-DNS acceptance (27 October 2026)
+## Previous owned-client and private-DNS acceptance (27 October 2026)
 
 Runtime source `b9917442c0d342d7bab2eb01e4d80e6e81ba7e01` passed all four
 [main functional jobs](https://github.com/efrgdgr0024345/vpn/actions/runs/40447778288),

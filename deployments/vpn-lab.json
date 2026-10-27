@@ -1,15 +1,15 @@
 {
   "environment": "vpn-lab",
-  "stage": "handover fix verified in CI; deployment blocked by SSH authentication; physical connection testing on hold",
-  "deployed_source_commit": "b9917442c0d342d7bab2eb01e4d80e6e81ba7e01",
+  "stage": "handover fix deployed and verified after reboot; owned Kali controlled acceptance ready",
+  "deployed_source_commit": "8510966a90bab33e7f848f6f8c1c534969d576e3",
   "os": "Debian 13",
-  "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447778025",
-  "live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448325728",
-  "reboot": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448105690",
-  "post_reboot_inventory": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448251641",
-  "observed_post_reboot_uptime_seconds": 67,
-  "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447778288",
-  "unit_tests_per_ubuntu_job": 171,
+  "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500400489",
+  "live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500906651",
+  "reboot": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500587276",
+  "post_reboot_inventory": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500752793",
+  "observed_post_reboot_uptime_seconds": 23,
+  "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40451196198",
+  "unit_tests_per_ubuntu_job": 173,
   "client_transfer": "Owner confirmed Kali profile/login downloaded with mode 0600 and verified server ED25519 fingerprint. Temporary download access closed; server export copies removed.",
   "client_transfer_closure": "https://github.com/efrgdgr0024345/vpn/actions/runs/40437848772",
   "validated": [
@@ -28,10 +28,10 @@
     "DNS roundtrip through encrypted VPN and IPv4 NAT",
     "private-network and cloud-metadata packet dropped",
     "IPv6 client block response",
-    "external UDP 1194 reaches the rebooted server"
+    "external UDP 1194 reaches the rebooted server",
+    "forced delayed-broker replay/disconnect ordering preserves the original broker process and still denies replay forwarding"
   ],
   "not_yet_validated": [
-    "corrected handover broker on the live VPS after gated update",
     "physical Kali installation, OpenVPN 2.7, resolver and firewall integration",
     "client physical-interface IPv4/IPv6/DNS leak testing and network/suspend transitions",
     "client early-boot guard: not implemented",
@@ -41,11 +41,9 @@
   "selected_design": "One tunnel, separate device keys, one global session, disconnect-before-transfer. No literal two-tunnel handoff.",
   "device_key_limit": "Keys originate on the server and are exported in private profiles; no hardware attestation or nonexportability claim.",
   "private_material": "Private server originals and the owner's Kali copies remain protected; no keys, passwords, tokens or real profiles in this record.",
-  "pre_reboot_live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447890007",
-  "previous_external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431775566",
   "github_security": {
-    "workflow": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447778310",
-    "source_commit": "b9917442c0d342d7bab2eb01e4d80e6e81ba7e01",
+    "workflow": "https://github.com/efrgdgr0024345/vpn/actions/runs/40451196186",
+    "source_commit": "8510966a90bab33e7f848f6f8c1c534969d576e3",
     "codeql_findings": 0,
     "blocking_findings": 0,
     "native_repository_security_settings": "Integration cannot enable owner-only alerts/scanning/push-protection settings (GitHub 403); owner verification pending.",
@@ -66,8 +64,18 @@
     "queries_logged": false,
     "access": "UDP/TCP 53 only from the currently authorized VPN address on the tunnel"
   },
-  "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448467493",
-  "pending_update": {
+  "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40501184836",
+  "previous_deployment": {
+    "deployed_source_commit": "b9917442c0d342d7bab2eb01e4d80e6e81ba7e01",
+    "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447778025",
+    "live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448325728",
+    "reboot": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448105690",
+    "post_reboot_inventory": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448251641",
+    "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448467493",
+    "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447778288",
+    "unit_tests_per_ubuntu_job": 171
+  },
+  "resolved_update": {
     "runtime_source_commit": "71586730bc7af1ff4fe39a07abe7540a2b3f94c0",
     "controller_source_commit": "4435a0e569e3224e2d113d6d205387528dbb46da",
     "runtime_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40450316357",
@@ -75,7 +83,11 @@
     "codeql_findings": 0,
     "gated_installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40450316823",
     "access_diagnosis": "https://github.com/efrgdgr0024345/vpn/actions/runs/40450643823",
-    "status": "SSH authentication rejected; owner-console renewal of the existing expiring grant requested. Updated runtime not claimed deployed.",
-    "fix": "Tolerate only the exact already-gone client-kill response without changing admission/ownership; force the real stale-event ordering and verify original broker survives."
+    "status": "Resolved: owner renewed the existing SSH grant; read-only inventory confirmed restored access, then the reviewed update installed and passed post-reboot live acceptance.",
+    "fix": "Tolerate only the exact already-gone client-kill response without changing admission/ownership; force the real stale-event ordering and verify original broker survives.",
+    "access_restoration": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500307468",
+    "deployed_source_commit": "8510966a90bab33e7f848f6f8c1c534969d576e3",
+    "successful_installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500400489",
+    "post_reboot_acceptance": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500906651"
   }
 }

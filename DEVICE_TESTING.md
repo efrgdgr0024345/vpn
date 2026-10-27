@@ -5,7 +5,25 @@ are recorded in deployments/vpn-lab.json. The owner requested a testing request
 when actual device behavior becomes the remaining source of useful evidence.
 The existing Access Server is separate and must not be reconfigured.
 
-## First step: private profile transfer
+## First Kali acceptance step
+
+The corrected lab server has passed post-reboot live acceptance. The owner
+already has the private Kali profile and login file; start here without opening
+a new download grant.
+
+On the Kali desktop, as the ordinary desktop user, open a terminal in the
+reviewed source bundle's `source/vpn-dashboard` directory and run:
+
+```sh
+bash install.sh --check
+```
+
+This only checks prerequisites; it changes no firewall, DNS or routes. Report
+that output before moving on to the guided installation and first connection.
+The current build is for controlled acceptance, with the client boot/mobile
+limits described below.
+
+## Private profile transfer when needed
 
 Use a dedicated ED25519 download key generated on Kali. If it already exists,
 reuse its public key; do not overwrite an existing private key. To display it:

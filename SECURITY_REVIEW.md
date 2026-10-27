@@ -2,12 +2,12 @@
 
 ## Owned-client follow-up review, 27 October 2026
 
-The reviewed runtime source is `b9917442c0d342d7bab2eb01e4d80e6e81ba7e01`.
-[GitHub CodeQL security-and-quality](https://github.com/efrgdgr0024345/vpn/actions/runs/40447460637)
+The reviewed runtime source is `8510966a90bab33e7f848f6f8c1c534969d576e3`.
+[GitHub CodeQL security-and-quality](https://github.com/efrgdgr0024345/vpn/actions/runs/40451196186)
 completed with zero findings after the reported file-mode, unused-import,
 resource-lifetime and expected-exception findings were fixed without query
-suppression. [Functional validation](https://github.com/efrgdgr0024345/vpn/actions/runs/40447460753)
-passed all four jobs, including 171 unit tests per Ubuntu job, real kernel/UI,
+suppression. [Functional validation](https://github.com/efrgdgr0024345/vpn/actions/runs/40451196198)
+passed all four jobs, including 173 unit tests per Ubuntu job, real kernel/UI,
 SSH/SFTP and VPN/PAM/DNS/session tests. This is automated review evidence, not
 proof of security or validation of the whole upstream engine/OS.
 
@@ -45,7 +45,10 @@ now tolerates only its exact `ERROR: client-kill command failed` reply outside
 an atomic event, with no grant or ownership-state change. Authentication and all
 other command errors still stop the broker. This is a reminder that static
 analysis does not replace runtime adversarial tests; PROJECT_STATUS.md records
-validation/deployment progress.
+validation/deployment evidence. The corrected source is now deployed and
+passed post-reboot live acceptance, including the forced ordering with the
+original broker process surviving throughout:
+[run 40500906651](https://github.com/efrgdgr0024345/vpn/actions/runs/40500906651).
 
 ## Earlier client hardening
 
