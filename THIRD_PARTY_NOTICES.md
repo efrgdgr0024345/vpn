@@ -9,6 +9,9 @@ distribution-provided tools; it does not vendor their source or binaries.
 | OpenVPN Community | The OpenVPN project and contributors. GPLv2 terms with applicable upstream exceptions; [upstream](https://github.com/OpenVPN/openvpn). Installed notice: `/usr/share/doc/openvpn/copyright`. |
 | Easy-RSA | The OpenVPN/Easy-RSA contributors. GPLv2; [upstream](https://github.com/OpenVPN/easy-rsa). Installed notice: `/usr/share/doc/easy-rsa/copyright`. |
 | OpenSSL 3 | The OpenSSL project and contributors. Apache License 2.0; [license](https://openssl-library.org/source/license/). Installed notice: `/usr/share/doc/openssl/copyright`. |
+| Unbound | NLnet Labs and contributors. BSD-style upstream terms; [upstream](https://github.com/NLnetLabs/unbound). Installed notice: `/usr/share/doc/unbound/copyright`. |
+| DNS root data | DNS root-zone and trust-anchor maintainers, IANA/ICANN and Debian maintainers. Data/components retain their applicable terms; installed notice: `/usr/share/doc/dns-root-data/copyright`. |
+| Tcl/Tk | Tcl/Tk authors and contributors. Upstream BSD-style/component terms; [Tk source](https://github.com/tcltk/tk). Distribution Tcl/Tk copyright notices remain installed. |
 | nftables / Netfilter | The Netfilter project and contributors. See the upstream GPL notices and distribution copyright file; [upstream](https://netfilter.org/projects/nftables/). Installed notice: `/usr/share/doc/nftables/copyright`. |
 | Linux kernel | Linux kernel contributors. GPLv2 with applicable upstream notes/exceptions; [upstream](https://www.kernel.org/). The installed kernel package retains its own copyright notices. |
 | iproute2 / procps | The respective networking and process-tools contributors; individual components retain their upstream terms. Installed notices: `/usr/share/doc/iproute2/copyright` and `/usr/share/doc/procps/copyright`. |
@@ -18,6 +21,7 @@ distribution-provided tools; it does not vendor their source or binaries.
 | Python 3 | The Python Software Foundation and contributors. PSF License Version 2 and bundled notices; [license](https://docs.python.org/3/license.html). |
 | Debian GNU/Linux | Debian developers, package maintainers and upstream authors. Packages retain their individual licenses and `/usr/share/doc/*/copyright` files; [Debian](https://www.debian.org/). |
 | GitHub Actions checkout | GitHub and contributors. MIT; [license at the pinned action revision](https://github.com/actions/checkout/blob/11bd71901bbe5b1630ceea73d27597364c9af683/LICENSE). |
+| GitHub CodeQL and dependency review | GitHub and contributors. The actions, query libraries and CodeQL tooling retain their respective upstream licenses/usage terms; [CodeQL action](https://github.com/github/codeql-action), [queries](https://github.com/github/codeql), [dependency review](https://github.com/actions/dependency-review-action). Used for eligible public-repository CI, not embedded in the client. |
 
 The original desktop dashboard came from the user-supplied `vpn-dashboard.zip`.
 Its original author and repository-wide license were not identified in the

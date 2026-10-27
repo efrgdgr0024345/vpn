@@ -76,10 +76,16 @@ def allowed_rules(policy=None, vpn_uid=None):
 
 def allowed_input_rules(policy):
     accept = {'accept': None}
+    state={'match': {'op':'in','left':{'ct':{'key':'state'}},'right':{'set':['established','related']}}}
+    protocol='udp' if policy['vpn_protocol']=='udp' else 'tcp'
     return [
         [match(meta('iifname'), 'lo'), accept],
-        [{'match': {'op': 'in', 'left': {'ct': {'key': 'state'}},
-                    'right': {'set': ['established', 'related']}}}, accept],
+        [match(meta('iifname'),'tun0'),state,accept],
+        [match(meta('iifname'),policy['wifi_interface']),
+         match(payload('ip','saddr'),policy['vpn_server_ipv4']),
+         match(payload(protocol,'sport'),policy['vpn_port']),state,accept],
+        [match(meta('iifname'),policy['wifi_interface']),match(meta('l4proto'),'icmp'),
+         match({'ct':{'key':'state'}},'related'),accept],
         [match(meta('iifname'), policy['wifi_interface']), match(meta('nfproto'), 'ipv4'),
          match(payload('ip', 'saddr'), policy['dhcp_server_ipv4']),
          match(payload('udp', 'sport'), 67), match(payload('udp', 'dport'), 68), accept],

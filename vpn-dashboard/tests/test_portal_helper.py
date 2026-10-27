@@ -36,6 +36,13 @@ class PolicyFixture(unittest.TestCase):
 
 
 class GuardTests(PolicyFixture):
+    def test_global_established_input_exception_is_not_an_acceptable_kill_switch(self):
+        doc=baseline()
+        doc['nftables'].append({'rule':{'family':'inet','table':'vpn_guard','chain':'input',
+                              'expr':[h.match({'ct':{'key':'state'}},'established'),{'accept':None}]}})
+        with self.assertRaises(h.Refused):
+            h.inspect_guard(doc)
+
     def test_independent_baseline_and_generated_policy_agree(self):
         self.assertEqual(h.inspect_guard(baseline()), (False, False))
         rendered = {'nftables': [x['add'] for x in render_batch(POLICY, 995)['nftables']]}

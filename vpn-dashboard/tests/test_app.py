@@ -6,6 +6,7 @@ from unittest.mock import patch
 import app
 import launch_vpn
 import portal_terminal
+from security import HELPER_FILES
 
 class DashboardTests(unittest.TestCase):
     def fixtures(self):
@@ -73,7 +74,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(launch_vpn.argv(), [
             '/usr/bin/sudo', '--', '/usr/bin/python3', '-I', '-B',
             '/usr/local/libexec/vpn-desk/privileged.py', 'connect'])
-        self.assertEqual(trust.call_count, 5)
+        self.assertEqual(trust.call_count, len(HELPER_FILES))
     @patch('security.trusted_path', side_effect=FileNotFoundError())
     def test_launcher_missing_installation_no_fallback(self, trust):
         with self.assertRaises(FileNotFoundError):

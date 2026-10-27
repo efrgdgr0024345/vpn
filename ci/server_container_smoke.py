@@ -14,6 +14,8 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ops'))
 import server_foundation as foundation
 import server_selftest
+sys.path.insert(0,str(ROOT/'ci'))
+import client_control_smoke
 
 
 def main():
@@ -32,7 +34,7 @@ def main():
     foundation.install(endpoint,22,True)
     if before!=[hashlib.sha256(p.read_bytes()).hexdigest() for p in (profile,login)]:
         raise SystemExit('Installer rerun changed existing client credentials.')
-    foundation.run(['/usr/sbin/ip','route','replace','9.9.9.9/32','via',sys.argv[1]])
+    foundation.run(['/usr/sbin/ip','route','replace','198.41.0.4/32','via',sys.argv[1]])
     log=Path('/run/vpn-server-test.log')
     Path('/run/openvpn-server').mkdir(mode=0o700,exist_ok=True)
     with open(log,'wb') as output:
@@ -41,6 +43,8 @@ def main():
                                 stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
         broker=subprocess.Popen(['/usr/bin/python3','-I','-B','/test/ops/session_broker.py'],
                                 stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+        resolver=subprocess.Popen(['/usr/sbin/unbound','-d'],stdout=output,stderr=subprocess.STDOUT,
+                                  start_new_session=True)
         try:
             end=time.monotonic()+15
             while time.monotonic()<end:
@@ -52,7 +56,11 @@ def main():
             else:
                 raise RuntimeError('OpenVPN server initialization timed out.')
             print(json.dumps(server_selftest.test(broker.pid),sort_keys=True),flush=True)
+            client_control_smoke.supervisor_with_real_openvpn()
         finally:
+            if resolver.poll() is None:
+                os.killpg(resolver.pid,signal.SIGTERM)
+                resolver.wait(timeout=5)
             if broker.poll() is None:
                 os.killpg(broker.pid,signal.SIGTERM)
                 broker.wait(timeout=5)

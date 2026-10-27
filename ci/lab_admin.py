@@ -291,6 +291,7 @@ def execute(operation, environment, run=bounded_run):
                       'device_revocation_denies_forwarding',
                       'replayed_session_token_denied',
                       'normal_disconnect_releases_slot',
+                      'private_vpn_resolver_answers',
                       'host_routes_and_resolver_modified','credentials_exported'}
         elif operation=='probe-udp':
             expected={'public_udp_1194_received'}

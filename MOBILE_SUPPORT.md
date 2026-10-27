@@ -1,5 +1,12 @@
 # Mobile support and the single-session requirement
 
+The owner subsequently requested our own application and rejected third-party
+VPN frontends/plugins. The stock OpenVPN Connect proposal below is historical.
+Kali is the current implementation in OWNED_CLIENT.md. Native iPhone/Android
+apps are not implemented; they will require their platform VPN APIs, an auditable
+transport library, licensing review and actual signing/device tests. Standard
+server profile support does not establish that those native apps exist.
+
 The owner approved direct device connections and single-tunnel staged access.
 The implementation uses ordinary OpenVPN profiles and session tokens rather
 than a custom mobile app. Physical iOS/Android testing remains necessary; server

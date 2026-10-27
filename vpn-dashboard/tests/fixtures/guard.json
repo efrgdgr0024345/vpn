@@ -9,7 +9,21 @@
       {"accept": null}
     ]}},
     {"rule": {"family": "inet", "table": "vpn_guard", "chain": "input", "expr": [
+      {"match": {"op": "==", "left": {"meta": {"key": "iifname"}}, "right": "tun0"}},
       {"match": {"op": "in", "left": {"ct": {"key": "state"}}, "right": {"set": ["established", "related"]}}},
+      {"accept": null}
+    ]}},
+    {"rule": {"family": "inet", "table": "vpn_guard", "chain": "input", "expr": [
+      {"match": {"op": "==", "left": {"meta": {"key": "iifname"}}, "right": "wlan0"}},
+      {"match": {"op": "==", "left": {"payload": {"protocol": "ip", "field": "saddr"}}, "right": "192.0.2.10"}},
+      {"match": {"op": "==", "left": {"payload": {"protocol": "udp", "field": "sport"}}, "right": 1194}},
+      {"match": {"op": "in", "left": {"ct": {"key": "state"}}, "right": {"set": ["established", "related"]}}},
+      {"accept": null}
+    ]}},
+    {"rule": {"family": "inet", "table": "vpn_guard", "chain": "input", "expr": [
+      {"match": {"op": "==", "left": {"meta": {"key": "iifname"}}, "right": "wlan0"}},
+      {"match": {"op": "==", "left": {"meta": {"key": "l4proto"}}, "right": "icmp"}},
+      {"match": {"op": "==", "left": {"ct": {"key": "state"}}, "right": "related"}},
       {"accept": null}
     ]}},
     {"rule": {"family": "inet", "table": "vpn_guard", "chain": "input", "expr": [

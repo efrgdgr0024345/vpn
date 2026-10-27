@@ -14,7 +14,7 @@ CONFIG_DIR = Path('/etc/vpn-desk')
 PROFILE = CONFIG_DIR / 'client.ovpn'
 POLICY = CONFIG_DIR / 'policy.json'
 HELPER_FILES = ('privileged.py', 'security.py', 'safe_io.py',
-                'portal_helper.py', 'vpn_session_helper.py')
+                'portal_helper.py', 'vpn_session_helper.py','session_channel.py','network_setup.py','firewall_policy.py')
 SERVICE_USER = 'vpn-desk'
 
 
@@ -52,7 +52,7 @@ def read_trusted(path, *, private=False, limit=1_000_000):
 
 
 def installed_command(action):
-    if action not in ('connect', 'portal-close', 'portal-status'):
+    if action not in ('connect','disconnect','network-restore', 'portal-close', 'portal-status'):
         raise Refused('Unsupported privileged action; portal opening is disabled.')
     for filename in HELPER_FILES:
         trusted_path(INSTALL_DIR / filename)

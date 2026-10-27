@@ -3,7 +3,7 @@ import sys
 import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from require_checks import approved,GateError
+from require_checks import approved,all_approved,GateError
 
 
 class DeploymentGateTests(unittest.TestCase):
@@ -25,6 +25,13 @@ class DeploymentGateTests(unittest.TestCase):
         pending=self.run_result(status='in_progress',conclusion=None)
         self.assertFalse(approved([failed,pending],'a'*40))
         self.assertTrue(approved([failed,self.run_result()],'a'*40))
+
+    def test_functional_success_without_security_success_cannot_deploy(self):
+        functional={'checks.yml':[self.run_result()]}
+        self.assertFalse(all_approved(functional,'a'*40))
+        with self.assertRaises(GateError):
+            all_approved({**functional,'security.yml':[self.run_result(conclusion='failure')]},'a'*40)
+        self.assertTrue(all_approved({**functional,'security.yml':[self.run_result()]},'a'*40))
 
 
 if __name__=='__main__':

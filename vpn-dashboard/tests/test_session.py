@@ -8,6 +8,25 @@ from security import PROFILE
 
 
 class SessionTests(unittest.TestCase):
+    def setUp(self):
+        patcher=patch.object(session.network_setup,'prepare')
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_pidfd_acquisition_failure_cleans_up_the_owned_child(self):
+        process=SimpleNamespace(pid=123,stdout=SimpleNamespace(close=lambda:None),
+                                poll=lambda:None)
+        from unittest.mock import Mock,MagicMock
+        process.terminate=Mock()
+        process.wait=Mock(return_value=0)
+        with patch.object(session.session_channel,'Server',return_value=MagicMock()), \
+                patch.object(session.subprocess,'Popen',return_value=process), \
+                patch.object(session.os,'pidfd_open',side_effect=OSError('fixture')), \
+                patch.object(session.signal,'signal'),patch('builtins.print'):
+            self.assertEqual(session.controlled_session(['fixture'],1000),1)
+        process.terminate.assert_called_once()
+        process.wait.assert_called_once()
+
     def test_only_protected_profile_reaches_openvpn(self):
         account = SimpleNamespace(pw_uid=995, pw_gid=995)
         with patch.object(session, 'load_policy', return_value={'test': 'policy'}), \

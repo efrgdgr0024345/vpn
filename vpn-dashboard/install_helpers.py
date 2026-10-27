@@ -7,7 +7,7 @@ import stat
 
 DESTINATION = Path('/usr/local/libexec/vpn-desk')
 FILES = ('security.py', 'safe_io.py', 'portal_helper.py',
-         'vpn_session_helper.py', 'privileged.py')
+         'vpn_session_helper.py','session_channel.py','network_setup.py','firewall_policy.py', 'privileged.py')
 
 
 def check_directory(path):

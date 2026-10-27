@@ -22,10 +22,10 @@ BIN_DIR = Path('/usr/local/bin')
 MENU_DIR = Path('/usr/local/share/applications')
 LOCK = Path('/run/vpn-dashboard-portal.lock')
 ENVIRONMENT = {'PATH': '/usr/sbin:/usr/bin', 'LC_ALL': 'C'}
-HELPERS = ('privileged.py', 'security.py', 'safe_io.py', 'portal_helper.py', 'vpn_session_helper.py')
+HELPERS = ('privileged.py', 'security.py', 'safe_io.py', 'portal_helper.py', 'vpn_session_helper.py','session_channel.py','network_setup.py','firewall_policy.py')
 APPLICATION = ('app.py', 'connections.py', 'connections_ui.py', 'launch_vpn.py',
                'portal_terminal.py', 'security.py', 'safe_io.py', 'recovery.txt',
-               'README.md', 'INSTALL.md')
+               'README.md', 'INSTALL.md','session_channel.py','session_ui.py','install_audit.py')
 LAUNCHER = b'''#!/bin/sh
 if [ "$(/usr/bin/id -u)" = 0 ]; then
     printf '%s\\n' 'Run VPN Desk as your ordinary desktop user.' >&2
@@ -64,8 +64,6 @@ def required_packages():
         'openvpn': ('/usr/sbin/openvpn', '/usr/bin/openvpn'),
         'iproute2': ('/usr/sbin/ip',),
         'nftables': ('/usr/sbin/nft',),
-        'network-manager': ('/usr/bin/nmcli',),
-        'systemd': ('/usr/bin/systemctl',),
         'sudo': ('/usr/bin/sudo',),
         'passwd': ('/usr/sbin/useradd',),
     }
@@ -284,7 +282,7 @@ def collect_configuration(security, invoking_uid):
     except KeyError:
         home = Path('/')
     print('Import a supported self-contained .ovpn profile. Its contents/keys will not be printed.')
-    value = ask('Profile file path', str(home / 'droplet-vpn.ovpn'))
+    value = ask('Profile file path', str(home / 'vpn-lab/client.ovpn'))
     source = Path(value)
     if not source.is_absolute():
         raise InstallationError('Use an absolute profile path.')
@@ -333,6 +331,15 @@ def install(security, firewall_policy, contents, policy, profile):
     helper_files = {name: contents[name] for name in HELPERS if name != 'privileged.py'}
     helper_files['privileged.py'] = contents['privileged.py']  # Publish entry last.
     app_files = {name: contents[name] for name in APPLICATION}
+    # This public-code inventory excludes policies, profiles, keys and passwords.
+    manifest_files={HELPER_DIR/name:data for name,data in helper_files.items()}
+    manifest_files.update({APP_DIR/name:data for name,data in app_files.items()})
+    manifest_files[BIN_DIR/'vpn-desk']=LAUNCHER
+    manifest_files[MENU_DIR/'vpn-desk.desktop']=DESKTOP
+    import hashlib
+    manifest={'version':1,'files':{str(path):hashlib.sha256(data).hexdigest()
+                                  for path,data in sorted(manifest_files.items(),key=lambda row:str(row[0]))}}
+    app_files['install-manifest.json']=(json.dumps(manifest,sort_keys=True,indent=2)+'\n').encode()
     # All known destination conflicts are diagnosed before account/file changes.
     for directory, files in ((HELPER_DIR, helper_files), (APP_DIR, app_files),
                              (BIN_DIR, {'vpn-desk': LAUNCHER}),
@@ -391,9 +398,9 @@ def main(argv=None):
             return 1
         install(security, firewall_policy, contents, policy, profile)
     print('\nInstalled. Open VPN Desk from the applications menu, or run vpn-desk as your desktop user.')
-    print('Firewall/DNS were not changed. Connect requires the matching live firewall baseline.')
-    print('A private candidate is saved at /etc/vpn-desk/vpn-guard.candidate.json; see INSTALL.md before any migration.')
-    print('Installation does not establish that a VPN connection or leak protection works.')
+    print('Installation has not changed networking. Connect enables the app-owned guard and private VPN DNS.')
+    print('An existing unrelated firewall is preserved and causes Connect to stop for migration review.')
+    print('Disconnect keeps the guard on; Restore normal networking explicitly releases it. See INSTALL.md.')
     return 0
 
 

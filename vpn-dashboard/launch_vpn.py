@@ -11,8 +11,10 @@ from security import Refused, installed_command
 from safe_io import bounded_run
 
 
-def argv():
-    return installed_command('connect')
+def argv(action='connect'):
+    if action not in ('connect','disconnect','network-restore'):
+        raise Refused('Unsupported session action.')
+    return installed_command(action)
 
 
 def existing_openvpn():
@@ -54,7 +56,10 @@ def main():
         print('Launch VPN Desk as your normal desktop user, not root.')
         return 1
     try:
-        command = argv()
+        action=sys.argv[1] if len(sys.argv)==2 else 'connect'
+        command = argv(action)
+        if action in ('disconnect','network-restore'):
+            return subprocess.call(command)
         lock = session_lock()
         if existing_openvpn():
             raise ValueError('An OpenVPN process already exists. Stop it in its original terminal first.')

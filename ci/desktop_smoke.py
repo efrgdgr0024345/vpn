@@ -27,6 +27,11 @@ def main():
                 assert self.winfo_ismapped(), 'Dashboard was not mapped'
                 assert 'VPN Desk' in self.title(), 'Wrong dashboard title'
                 assert self.winfo_children(), 'Dashboard has no widgets'
+                import session_ui
+                window=session_ui.open_session_window(self)
+                self.update_idletasks()
+                assert window.winfo_exists(), 'Session log window was not created'
+                window.destroy()
                 checked.append(True)
             except Exception as exc:
                 failures.append(str(exc))

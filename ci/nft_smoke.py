@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'vpn-dashboard'))
 import firewall_policy
 import portal_helper
+import network_setup
 from security import Refused
 
 
@@ -62,6 +64,35 @@ def main():
         else:
             raise SystemExit('An unexpected output bypass was accepted.')
     print('Real nftables roundtrip and bypass refusal passed in an isolated namespace.')
+    command(['/usr/sbin/nft','delete','table','inet','vpn_guard'])
+    policy['server_name']='VPNLabServer'
+    with tempfile.TemporaryDirectory(prefix='vpn-desk-network-',dir='/run') as directory:
+        directory=Path(directory)
+        resolver=directory/'resolv.conf'
+        resolver.write_text('nameserver 192.0.2.53\n')
+        resolver.chmod(0o644)
+        (directory/'policy.json').write_text(json.dumps(policy))
+        (directory/'policy.json').chmod(0o600)
+        with patch.object(network_setup,'CONFIG_DIR',directory), \
+                patch.object(network_setup,'STATE',directory/'network-state.json'), \
+                patch.object(network_setup,'RESOLVER',resolver), \
+                patch.object(network_setup,'load_policy',return_value=policy), \
+                patch.object(network_setup,'service_account',return_value=SimpleNamespace(pw_uid=uid)), \
+                patch.object(portal_helper,'load_policy',return_value=policy), \
+                patch.object(portal_helper,'service_account',return_value=SimpleNamespace(pw_uid=uid)), \
+                patch.object(portal_helper,'active_openvpn',return_value=False):
+            network_setup.prepare()
+            if resolver.read_text()!=network_setup.MANAGED_DNS:
+                raise SystemExit('Private VPN DNS was not installed after the real guard.')
+            resolver.write_text('nameserver 192.0.2.53\n')
+            if network_setup.verify_during_session() is not False or resolver.read_text()!=network_setup.MANAGED_DNS:
+                raise SystemExit('Resolver repair under the guard failed.')
+            network_setup.restore()
+            if resolver.read_text()!='nameserver 192.0.2.53\n' or (directory/'network-state.json').exists():
+                raise SystemExit('Explicit owned-network restore failed.')
+            if any('table' in row for row in json.loads(command(['/usr/sbin/nft','-j','list','ruleset']))['nftables']):
+                raise SystemExit('The owned firewall was not released on explicit restore.')
+    print('Real guard/private-DNS sequencing, repair and explicit restore passed with a private resolver fixture.')
     return 0
 
 

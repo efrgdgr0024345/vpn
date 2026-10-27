@@ -154,7 +154,7 @@ def main():
     except tk.TclError:
         print('A graphical desktop is required. Read recovery.txt in a terminal: less recovery.txt')
         return 1
-    root.title('VPN Desk · diagnostics + terminal launcher')
+    root.title('VPN Desk · local VPN control')
     root.geometry('1040x830')
     root.minsize(820, 650)
     root.configure(bg='#0b1220')
@@ -170,7 +170,7 @@ def main():
     outer = ttk.Frame(root, padding=24)
     outer.pack(fill='both', expand=True)
     ttk.Label(outer, text='◈  VPN Desk', style='Title.TLabel').pack(anchor='w')
-    ttk.Label(outer, text='Your connection, clearly explained.  •  Diagnostics + terminal launcher', foreground='#94a3b8').pack(anchor='w', pady=(5, 12))
+    ttk.Label(outer, text='Local connection controls, private session logs and code review', foreground='#94a3b8').pack(anchor='w', pady=(5, 12))
     ttk.Label(outer, text='!  UNVERIFIED — this dashboard cannot certify VPN health or leak protection.', style='Warn.TLabel').pack(anchor='w')
     user = getpass.getuser()
     host = socket.gethostname()
@@ -190,15 +190,12 @@ def main():
     controls.pack(fill='x')
     connect_btn = ttk.Button(controls, text='▶ Connect in terminal', state='disabled')
     connect_btn.pack(side='left', padx=(0, 8))
-    stop_btn = ttk.Button(controls, text='■ How to disconnect')
+    stop_btn = ttk.Button(controls, text='■ Disconnect')
     stop_btn.pack(side='left', padx=(0, 8))
     portal_open = ttk.Button(controls, text='Wi-Fi bypass disabled', state='disabled')
-    portal_open.pack(side='left', padx=(0, 8))
     portal_close = ttk.Button(controls, text='Close portal')
-    portal_close.pack(side='left', padx=(0, 8))
     portal_status = ttk.Button(controls, text='Portal status')
-    portal_status.pack(side='left')
-    ttk.Label(outer, text='Direct Wi-Fi bypass is disabled. Connect requires administrator-installed helpers, profile and firewall policy.', foreground='#fbbf24', wraplength=920).pack(anchor='w', pady=8)
+    ttk.Label(outer, text='Disconnect keeps the kill switch on. Restore normal networking deliberately releases it. Boot-time client protection is not yet verified.', foreground='#fbbf24', wraplength=920).pack(anchor='w', pady=8)
     log = tk.Text(outer, height=11, wrap='word', bg='#111d30', fg='#cbd5e1', insertbackground='white', relief='flat', padx=12, pady=12, font=('DejaVu Sans Mono', 9))
     log.pack(fill='both', expand=True, pady=(8, 12))
     scrollbar = ttk.Scrollbar(log, command=log.yview)
@@ -246,13 +243,11 @@ def main():
     def connect():
         if current['busy'] or current['launched']:
             return
-        if not messagebox.askokcancel('Connect using your confirmed command',
-            'This opens a terminal running the installed root-owned helper and /etc/vpn-desk/client.ovpn, '
-            '--auth-user-pass --auth-nocache --mssfix 1300. Enter passwords ONLY there. '
-            'The administrator-installed profile is validated before OpenVPN drops to its dedicated account. '
-            'Do not proceed if another VPN process is starting or already running. '
-            'The helper first closes and verifies the portal, then holds a shared lock to prevent portal opening during this VPN session. '
-            'Unknown firewall/portal state refuses connection. The full firewall is not certified. Continue?', parent=root):
+        if not messagebox.askokcancel('Connect with protection',
+            'Enter credentials in the authentication terminal. '
+            'The helper enables the app-owned kill switch and private VPN DNS, then verifies them. '
+            'An unrelated firewall is preserved and causes setup to stop. '
+            'Disconnect keeps Internet traffic blocked until you explicitly Restore normal networking. Continue?', parent=root):
             return
         current['busy'] = True
         connect_btn.configure(state='disabled')
@@ -304,16 +299,41 @@ def main():
             else:
                 current['launched'] = True
                 note.set('Terminal launch requested — connection NOT confirmed. Authenticate there; Ctrl+C there to stop.')
+                show_session()
                 messagebox.showinfo('Check the VPN terminal',
                     'Terminal launch was requested, not verified. Authenticate there and look for OpenVPN errors. '
                     'Keep it open. Refresh checks local state only. Connect stays disabled in this app session '
                     'to prevent repeated launches; restart the app only after confirming the old VPN has stopped.', parent=root)
         root.after(100, poll_launch)
     connect_btn.configure(command=connect)
-    stop_btn.configure(command=lambda: messagebox.showinfo('Disconnect safely',
-        'In the terminal that started your VPN, press Ctrl+C and wait for OpenVPN to exit. '
-        'Leave nftables enabled. Refresh here afterwards; a missing tunnel is not proof that all VPN processes stopped. '
-        'If that terminal is lost, follow Offline help; do not use pkill or a guessed service.', parent=root))
+    def disconnect():
+        terminal=next((p for p in ('/usr/bin/x-terminal-emulator','/usr/bin/xterm') if os.access(p,os.X_OK)),None)
+        try:
+            launch_vpn.argv('disconnect')
+            if terminal is None:
+                raise ValueError('No supported terminal is available.')
+            subprocess.Popen([terminal,'-e',sys.executable,str(BASE/'launch_vpn.py'),'disconnect'],
+                             stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            current['launched']=False
+            note.set('Authenticate in the terminal to stop only this app-owned session. The firewall stays enabled.')
+        except (OSError,Refused,ValueError):
+            messagebox.showwarning('Disconnect unavailable','The protected disconnect helper could not be launched.',parent=root)
+    stop_btn.configure(command=disconnect)
+    def restore_network():
+        if not messagebox.askokcancel('Restore normal networking',
+            'After stopping the VPN, this releases the app-owned kill switch and restores your previous DNS. '
+            'Normal Internet traffic can then use Wi-Fi directly. Authenticate in the terminal to continue.',parent=root):
+            return
+        terminal=next((p for p in ('/usr/bin/x-terminal-emulator','/usr/bin/xterm') if os.access(p,os.X_OK)),None)
+        try:
+            launch_vpn.argv('network-restore')
+            if terminal is None:
+                raise ValueError('No terminal.')
+            subprocess.Popen([terminal,'-e',sys.executable,str(BASE/'launch_vpn.py'),'network-restore'],
+                             stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        except (OSError,Refused,ValueError):
+            messagebox.showwarning('Restore unavailable','Normal networking was not confirmed restored.',parent=root)
+    ttk.Button(controls,text='Restore normal networking',command=restore_network).pack(side='left',padx=(8,0))
     root.after(100, poll_launch)
     def portal(action):
         if action == 'open':
@@ -377,6 +397,15 @@ def main():
             return
         connection_window['window'] = open_connections(root)
     ttk.Button(footer, text='↔ Connections', command=show_connections).pack(side='left')
+    session_window={'window':None}
+    def show_session():
+        from session_ui import open_session_window
+        existing=session_window['window']
+        if existing is not None and existing.winfo_exists():
+            existing.lift()
+        else:
+            session_window['window']=open_session_window(root)
+    ttk.Button(footer,text='Session log / audit',command=show_session).pack(side='left',padx=(8,0))
     ttk.Label(outer, textvariable=note, foreground='#94a3b8', wraplength=930).pack(anchor='w', pady=(12, 0))
     root.after(100, poll)
     root.after(300, refresh)

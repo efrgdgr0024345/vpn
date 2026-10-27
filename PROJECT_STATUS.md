@@ -1,5 +1,19 @@
 # Project history and current status
 
+Current work supersedes the earlier client plan: the owner requested our own
+standalone app, local logs and reviewable code, rejected a NetworkManager VPN
+plugin, and explicitly requested GitHub security/code review. OWNED_CLIENT.md
+describes the Kali implementation and its limits. Native phone apps are a later
+phase. GitHub CodeQL security/quality and PR dependency review are configured;
+functional and security checks both gate exact-commit lab mutations. The source
+now includes a VPS-owned recursive resolver instead of a public DNS forwarder;
+deployment evidence remains in deployments/vpn-lab.json until the new build passes.
+
+The integration cannot enable repository-wide Dependabot alerts or secret
+scanning/push protection: GitHub returned "Resource not accessible by integration"
+on both authorized setting changes. The owner has been asked to enable those
+settings directly. This does not grant security jobs any SSH/profile credentials.
+
 This reconciles the conversation available in this task, the original uploaded
 ZIP, the local project, Git history, the current remote main ref and the preserved
 distributed ZIPs. Separate older ChatGPT conversations are not exposed through

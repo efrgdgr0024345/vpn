@@ -13,6 +13,15 @@ import server_selftest as probe
 
 
 class FoundationTests(unittest.TestCase):
+    def test_private_resolver_has_no_public_forwarder_in_production(self):
+        configuration=server.resolver_configuration(False)
+        self.assertIn('interface: 172.27.240.1',configuration)
+        self.assertNotIn('forward-zone',configuration)
+        self.assertNotIn('forward-addr',configuration)
+        self.assertIn('log-queries: no',configuration)
+        self.assertIn('forward-addr: 198.41.0.4',server.resolver_configuration(True))
+        firewall=server.firewall('eth0',22)
+        self.assertLess(firewall.index('vpn-lab-private-dns'),firewall.index('vpn-lab-block-host'))
     def test_old_runner_unit_symlink_is_removed_without_following_its_target(self):
         with tempfile.TemporaryDirectory() as directory:
             original=Path(directory)/'keep'

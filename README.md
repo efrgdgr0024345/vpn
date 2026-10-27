@@ -1,5 +1,12 @@
 # VPN lab and VPN Desk
 
+The owner has selected [our own client application](OWNED_CLIENT.md), with local
+controls/logs and reviewable code, rather than a NetworkManager VPN plugin or
+stock VPN frontend. The new Kali app implementation is undergoing validation;
+native phone apps remain a separate phase. Runtime dependencies and trust limits
+are explicit. GitHub CodeQL security/quality review now complements functional
+checks; both workflows gate lab mutations for the exact commit.
+
 This project contains a Debian 13 OpenVPN lab managed through GitHub Actions and
 a Linux desktop-client prototype. The working Access Server stays separate.
 See [server setup](SERVER_SETUP.md), [workflow administration](GITHUB_LAB.md),
