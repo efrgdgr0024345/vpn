@@ -77,9 +77,19 @@ The successful deployed/live acceptance record above remains separate evidence.
 The owner supplied their dedicated Kali download public key. Gated
 [download enrollment 40433179371](https://github.com/efrgdgr0024345/vpn/actions/runs/40433179371)
 verified the expected public fingerprint and authorized the Kali files through
-the expiring, read-only chroot. The private key remains on Kali. File retrieval
-and grant closure await the owner's confirmation; no VPN connection is inferred
-from enrollment.
+the expiring, read-only chroot. The private key remains on Kali. The owner
+subsequently confirmed both files downloaded with mode 0600 and the saved
+ED25519 server fingerprint matching the independently verified host.
+[Closure 40437848772](https://github.com/efrgdgr0024345/vpn/actions/runs/40437848772)
+removed new download access and the private export copies. File transfer is not
+proof of a VPN connection. The owner confirms Kali has no active VPN; client
+testing need not account for a simultaneous older tunnel.
+
+[Repeat CI 40433404216](https://github.com/efrgdgr0024345/vpn/actions/runs/40433404216)
+and [main CI 40433658177](https://github.com/efrgdgr0024345/vpn/actions/runs/40433658177)
+passed all four jobs with the controlled diagnostic wrapper. The earlier
+test-branch failure was not reproduced and its reason remains unestablished;
+it has not been silently declared fixed.
 
 ## Reconstructed work history
 

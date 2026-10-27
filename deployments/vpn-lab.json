@@ -11,7 +11,8 @@
   "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431775566",
   "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431176614",
   "unit_tests_per_ubuntu_job": 152,
-  "client_transfer": "Device-selecting chrooted read-only SFTP tested; owner public-key enrollment pending.",
+  "client_transfer": "Owner confirmed Kali profile/login downloaded with mode 0600 and verified server ED25519 fingerprint. Temporary download access closed; server export copies removed.",
+  "client_transfer_closure": "https://github.com/efrgdgr0024345/vpn/actions/runs/40437848772",
   "validated": [
     "native VPN and broker services recover automatically after reboot",
     "persistent default-drop input and forwarding firewall",
@@ -37,5 +38,5 @@
   ],
   "selected_design": "One tunnel, separate device keys, one global session, disconnect-before-transfer. No literal two-tunnel handoff.",
   "device_key_limit": "Keys originate on the server and are exported in private profiles; no hardware attestation or nonexportability claim.",
-  "private_material": "Retained on the server; no keys, passwords, tokens or real profiles in this record."
+  "private_material": "Private server originals and the owner's Kali copies remain protected; no keys, passwords, tokens or real profiles in this record."
 }
