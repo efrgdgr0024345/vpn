@@ -77,13 +77,18 @@ def read_owned(path):
         return value.decode('utf-8')
 
 
-def write(path, value, mode=0o600):
-    path = Path(path)
-    directory(path.parent)
+def validate_existing_file(path):
     try:
         read_owned(path)
     except FileNotFoundError:
-        pass
+        # First installation has no previous file to validate.
+        return
+
+
+def write(path, value, mode=0o600):
+    path = Path(path)
+    directory(path.parent)
+    validate_existing_file(path)
     fd, temporary = tempfile.mkstemp(prefix='.vpn-lab-', dir=path.parent)
     try:
         with os.fdopen(fd, 'w') as stream:

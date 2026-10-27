@@ -1,4 +1,5 @@
 """Read local protected credentials to test the VPN; never export their contents."""
+from contextlib import ExitStack
 import ipaddress
 import json
 import os
@@ -109,7 +110,6 @@ def test(broker_pid=None):
     # default gateway is changed. AF_PACKET sends/receives only on this test TUN.
     profile=re.sub(r'^remote .*$', 'remote 127.0.0.1 1194', profile, flags=re.M)
     processes=[]
-    files=[]
     managers=[]
     def stop(process):
         if process.poll() is None:
@@ -119,7 +119,7 @@ def test(broker_pid=None):
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid,signal.SIGKILL)
                 process.wait()
-    with tempfile.TemporaryDirectory(prefix='vpn-lab-test-',dir='/run') as directory:
+    with tempfile.TemporaryDirectory(prefix='vpn-lab-test-',dir='/run') as directory, ExitStack() as resources:
         root=Path(directory)
         def start(name,password,device='kali'):
             selected=profile if device=='kali' else read_private('/root/vpn-lab/devices/'+device+'/client.ovpn')
@@ -129,9 +129,8 @@ def test(broker_pid=None):
                 fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
                 with os.fdopen(fd,'w') as stream:
                     stream.write(value)
-            output=open(log,'wb')
+            output=resources.enter_context(open(log,'wb'))
             os.chmod(log,0o600)
-            files.append(output)
             extra=[]
             if name=='lab-check':
                 extra=['--management',str(root/'token-observer'),'unix','--management-client-user','root']
@@ -411,8 +410,6 @@ def test(broker_pid=None):
             update_registry(policy_before)
             for process in reversed(processes):
                 stop(process)
-            for output in files:
-                output.close()
             for manager in managers:
                 manager.close()
 

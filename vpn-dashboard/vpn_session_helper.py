@@ -89,7 +89,8 @@ def controlled_session(command,owner_uid):
                 # ever supplied by a caller or read from a mutable file.
                 process.terminate()
         except ProcessLookupError:
-            pass
+            # The child already exited; there is nothing left to signal.
+            return
     previous_handler=signal.getsignal(signal.SIGTERM)
     try:
         with session_channel.Server(owner_uid,events,stop):

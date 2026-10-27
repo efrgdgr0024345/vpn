@@ -245,11 +245,15 @@ def main():
     info = RUNTIME.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
         raise BrokerError('Unprotected broker runtime.')
-    lock = os.open(RUNTIME/'broker.lock', os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-    info = os.fstat(lock)
-    if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o077:
-        raise BrokerError('Unprotected broker lock.')
-    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with os.fdopen(os.open(RUNTIME/'broker.lock', os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600), 'w') as lock:
+        info = os.fstat(lock.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o077:
+            raise BrokerError('Unprotected broker lock.')
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        serve()
+
+
+def serve():
     nft()
     devices = registry(protected_read(REGISTRY))
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as channel:

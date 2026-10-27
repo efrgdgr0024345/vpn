@@ -102,7 +102,8 @@ class LauncherSafetyTests(unittest.TestCase):
                 fd = launch_vpn.session_lock()
                 try:
                     with self.assertRaises(ValueError):
-                        launch_vpn.session_lock()
+                        extra = launch_vpn.session_lock()
+                        launch_vpn.os.close(extra)
                 finally:
                     launch_vpn.os.close(fd)
                 fd = launch_vpn.session_lock()
