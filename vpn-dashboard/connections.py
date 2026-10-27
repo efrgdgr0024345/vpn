@@ -2,7 +2,6 @@
 from collections import deque
 from datetime import datetime, timezone
 import ipaddress
-import os
 import re
 import subprocess
 from safe_io import bounded_run

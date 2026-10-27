@@ -46,15 +46,17 @@ def build(output,revision):
         name:{'sha256':hashlib.sha256(value).hexdigest(),'git_mode':mode} for name,mode,value in files}}
     fd=os.open(output,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
     try:
-        with os.fdopen(fd,'wb') as stream,zipfile.ZipFile(stream,'w',compression=zipfile.ZIP_DEFLATED) as archive:
+        with os.fdopen(fd,'wb') as stream,zipfile.ZipFile(stream,'w',compression=zipfile.ZIP_STORED) as archive:
             for name,mode,value in files:
                 info=zipfile.ZipInfo('source/'+name,date_time=(1980,1,1,0,0,0))
+                info.create_system=3
                 info.external_attr=(int(mode,8)<<16)
-                info.compress_type=zipfile.ZIP_DEFLATED
+                info.compress_type=zipfile.ZIP_STORED
                 archive.writestr(info,value)
             info=zipfile.ZipInfo('REVIEW_MANIFEST.json',date_time=(1980,1,1,0,0,0))
+            info.create_system=3
             info.external_attr=(0o100644<<16)
-            info.compress_type=zipfile.ZIP_DEFLATED
+            info.compress_type=zipfile.ZIP_STORED
             archive.writestr(info,json.dumps(manifest,sort_keys=True,indent=2)+'\n')
     except BaseException:
         Path(output).unlink(missing_ok=True)

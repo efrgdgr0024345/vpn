@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Visible per-action terminal authentication; no credentials handled by GUI."""
-from pathlib import Path
 import subprocess
 import sys
 from security import Refused, installed_command

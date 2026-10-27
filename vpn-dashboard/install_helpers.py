@@ -46,7 +46,7 @@ def main():
             check_directory(DESTINATION)
             for name, data in contents.items():
                 temporary = DESTINATION / (name + '.new')
-                output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o644)
+                output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
                 with os.fdopen(output, 'wb') as stream:
                     stream.write(data)
                     stream.flush()

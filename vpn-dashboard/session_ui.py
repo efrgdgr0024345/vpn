@@ -1,7 +1,5 @@
 """Local-only, bounded session event viewer. No raw OpenVPN log forwarding."""
 from datetime import datetime,timezone
-from pathlib import Path
-import os
 import queue
 import threading
 import session_channel

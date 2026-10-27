@@ -44,10 +44,9 @@ jobs:
           PY
           sh -n install.sh
       - name: Run unit and security regression tests
-        working-directory: vpn-dashboard
-        run: python3 -m unittest discover -s tests -v
+        run: python3 ci/run_units.py vpn-dashboard/tests
       - name: Test lab SSH safeguards and key authorization
-        run: python3 -m unittest discover -s ci/tests -v
+        run: python3 ci/run_units.py ci/tests
       - name: Open and close the real Tk dashboard on a virtual display
         run: timeout 20s xvfb-run --auto-servernum python3 ci/desktop_smoke.py
       - name: Check real nftables readback in a separate network namespace

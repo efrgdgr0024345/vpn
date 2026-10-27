@@ -7,7 +7,6 @@ root-owned resolv.conf, as found on the owner's Kali host, not symlink managers.
 import json
 import os
 from pathlib import Path
-import stat
 import tempfile
 import firewall_policy
 import portal_helper

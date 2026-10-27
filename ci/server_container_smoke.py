@@ -16,9 +16,11 @@ import server_foundation as foundation
 import server_selftest
 sys.path.insert(0,str(ROOT/'ci'))
 import client_control_smoke
+PHASE='preflight'
 
 
 def main():
+    global PHASE
     if (not Path('/.dockerenv').is_file() or os.geteuid()!=0
             or os.environ.get('VPN_LAB_DISPOSABLE_SERVER_TEST')!='1'):
         raise SystemExit('Use only the disposable server test harness.')
@@ -26,11 +28,13 @@ def main():
     if not Path('/dev/net/tun').exists():
         os.mknod('/dev/net/tun',stat.S_IFCHR|0o600,os.makedev(10,200))
     endpoint=socket.gethostbyname(socket.gethostname())
+    PHASE='foundation installation'
     report=foundation.install(endpoint,22,True)
     print(json.dumps(report,sort_keys=True),flush=True)
     profile=Path('/root/vpn-lab/client.ovpn')
     login=Path('/root/vpn-lab/login.txt')
     before=[hashlib.sha256(p.read_bytes()).hexdigest() for p in (profile,login)]
+    PHASE='idempotent installation'
     foundation.install(endpoint,22,True)
     if before!=[hashlib.sha256(p.read_bytes()).hexdigest() for p in (profile,login)]:
         raise SystemExit('Installer rerun changed existing client credentials.')
@@ -38,6 +42,7 @@ def main():
     log=Path('/run/vpn-server-test.log')
     Path('/run/openvpn-server').mkdir(mode=0o700,exist_ok=True)
     with open(log,'wb') as output:
+        PHASE='daemon startup'
         os.chmod(log,0o600)
         server=subprocess.Popen(['/usr/sbin/openvpn','--config','/etc/openvpn/server/vpn-lab.conf'],
                                 stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
@@ -55,9 +60,12 @@ def main():
                 time.sleep(.1)
             else:
                 raise RuntimeError('OpenVPN server initialization timed out.')
+            PHASE='live VPN packet and token tests'
             print(json.dumps(server_selftest.test(broker.pid),sort_keys=True),flush=True)
+            PHASE='owned app supervisor'
             client_control_smoke.supervisor_with_real_openvpn()
         finally:
+            PHASE='daemon cleanup after '+PHASE
             if resolver.poll() is None:
                 os.killpg(resolver.pid,signal.SIGTERM)
                 resolver.wait(timeout=5)
@@ -77,7 +85,7 @@ if __name__=='__main__':
         # Keep a useful, secret-free diagnostic readable through the Checks API
         # when the runner's signed log-download host is unavailable. Never dump
         # subprocess arguments, raw VPN logs or exception locals.
-        detail='Integration infrastructure or cleanup failed.'
+        detail='Integration failed during '+PHASE+' ('+type(exc).__name__+').'
         if isinstance(exc,(server_selftest.TestFailure,foundation.SetupError,RuntimeError)):
             candidate=str(exc)
             if re.fullmatch(r'[A-Za-z0-9 ,/_.()\-]{1,180}',candidate):

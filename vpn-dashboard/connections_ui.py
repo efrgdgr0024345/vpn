@@ -1,5 +1,4 @@
 """Optional live socket snapshots; Tk objects remain on the main thread."""
-from pathlib import Path
 from datetime import datetime, timezone
 import queue
 import threading
