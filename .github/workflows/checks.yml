@@ -52,6 +52,17 @@ jobs:
       - name: Check real nftables readback in a separate network namespace
         run: sudo /usr/bin/python3 -I -B ci/nft_smoke.py
 
+  installer-integration:
+    name: Real guided client installation (Debian 13)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Exercise extracted source permissions and real protected installation
+        run: sh ci/test_installer_container.sh
+
   ssh-integration:
     name: Real SSH administration safeguards (Debian 13)
     runs-on: ubuntu-24.04

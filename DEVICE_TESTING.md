@@ -15,11 +15,14 @@ On the Kali desktop, as the ordinary desktop user, open a terminal in the
 reviewed source bundle's `source/vpn-dashboard` directory and run:
 
 ```sh
+find . -type f -links 1 -exec chmod go-w -- {} +
 bash install.sh --check
 ```
 
-This only checks prerequisites; it changes no firewall, DNS or routes. Report
-that output before moving on to the guided installation and first connection.
+The first line removes group/other write permission from the extracted source
+files, needed with some ZIP extractors. The check itself is read-only and
+installs nothing; neither command changes firewall, DNS or routes. Report the
+check output before moving on to guided installation and first connection.
 The current build is for controlled acceptance, with the client boot/mobile
 limits described below.
 

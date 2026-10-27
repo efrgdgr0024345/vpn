@@ -15,11 +15,20 @@ Keep a trusted source/release copy and its independently recorded hash. Open a
 terminal as your ordinary user in its `vpn-dashboard` directory:
 
 ```sh
+find . -type f -links 1 -exec chmod go-w -- {} +
 bash install.sh --check
 bash install.sh
 ```
 
-The check is read-only. The installer requests sudo and optionally offers signed
+Run the first command only in this reviewed, extracted source directory. Some
+ZIP extractors create group-writable files when no Unix modes are supplied;
+the installer refuses those files. This removes group/other write permission
+from the source files without changing their contents. It does not modify an
+installed helper or weaken its ownership/link/permission checks.
+
+The check reads source metadata/syntax and dependencies without making changes.
+Normal installation repeats the source checks before requesting sudo and again
+inside the root process. The installer requests sudo and optionally offers signed
 distribution packages if prerequisites are missing. Runtime tools include Python
 3.10+/Tk, OpenVPN 2.5+, nftables, iproute2, sudo and a terminal. Linux process-
 descriptor signaling is required. NetworkManager/systemd diagnostic commands are

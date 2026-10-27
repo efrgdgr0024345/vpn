@@ -8,6 +8,7 @@ import stat
 import tempfile
 from types import SimpleNamespace
 import unittest
+import zipfile
 from unittest.mock import patch
 
 import install as wizard
@@ -198,3 +199,89 @@ class WizardTests(unittest.TestCase):
             self.assertEqual((wizard.MENU_DIR / 'vpn-desk.desktop').read_bytes(), wizard.DESKTOP)
             self.assertTrue((wizard.CONFIG_DIR / 'vpn-guard.candidate.json').is_file())
             run.assert_not_called()
+
+
+class BundleTests(unittest.TestCase):
+    def fixture(self, root):
+        for name in set(wizard.HELPERS + wizard.APPLICATION):
+            path = root / name
+            path.write_bytes(b'pass\n' if name.endswith('.py') else b'public fixture\n')
+            path.chmod(0o644)
+
+    def test_zip_extraction_with_shared_umask_is_rejected_then_accepts_owner_preparation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, extracted = root / 'source', root / 'extracted'
+            source.mkdir()
+            extracted.mkdir()
+            self.fixture(source)
+            archive_path = root / 'source.zip'
+            with zipfile.ZipFile(archive_path, 'w') as archive:
+                for path in source.iterdir():
+                    info = zipfile.ZipInfo(path.name)
+                    info.create_system = 0
+                    info.external_attr = 0x20
+                    archive.writestr(info, path.read_bytes())
+            previous = os.umask(0o002)
+            try:
+                with zipfile.ZipFile(archive_path) as archive:
+                    for name in set(wizard.HELPERS + wizard.APPLICATION):
+                        (extracted / name).write_bytes(archive.read(name))
+            finally:
+                os.umask(previous)
+            with patch.object(wizard, 'SOURCE', extracted):
+                with self.assertRaisesRegex(wizard.InstallationError, 'group/other writable'):
+                    wizard.snapshot_bundle(os.getuid())
+                before = {path.name: path.read_bytes() for path in extracted.iterdir()}
+                for path in extracted.iterdir():
+                    path.chmod(stat.S_IMODE(path.stat().st_mode) & ~0o022)
+                self.assertEqual(wizard.snapshot_bundle(os.getuid()), before)
+
+    def test_check_and_install_refuse_unsafe_source_before_elevation_or_dependency_commands(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            (root / 'app.py').chmod(0o666)
+            for arguments in (['--check'], []):
+                with patch.object(wizard, 'SOURCE', root), patch.object(wizard.subprocess, 'run') as run, \
+                        patch.object(wizard.os, 'geteuid', return_value=1000), \
+                        patch.object(wizard.sys.stdin, 'isatty', return_value=True):
+                    with self.assertRaisesRegex(wizard.InstallationError, 'app.py is group/other writable'):
+                        wizard.main(arguments)
+                    run.assert_not_called()
+
+    def test_source_links_are_still_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            target = root / 'target'
+            target.write_bytes(b'pass\n')
+            selected = root / 'app.py'
+            selected.unlink()
+            selected.symlink_to(target)
+            with patch.object(wizard, 'SOURCE', root), self.assertRaises(wizard.InstallationError):
+                wizard.snapshot_bundle(os.getuid())
+            selected.unlink()
+            os.link(target, selected)
+            with patch.object(wizard, 'SOURCE', root), self.assertRaisesRegex(wizard.InstallationError, 'one link'):
+                wizard.snapshot_bundle(os.getuid())
+
+    def test_source_owner_is_still_checked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            metadata = SimpleNamespace(st_mode=stat.S_IFREG | 0o644, st_uid=31415,
+                                       st_nlink=1, st_size=5)
+            with patch.object(wizard, 'SOURCE', root), patch.object(wizard.os, 'fstat', return_value=metadata), \
+                    self.assertRaisesRegex(wizard.InstallationError, 'belong to you or root'):
+                wizard.snapshot_bundle(1000)
+
+    def test_syntax_error_does_not_echo_source_contents(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.fixture(root)
+            (root / 'app.py').write_bytes(b'PRIVATE_FIXTURE_CONTENT = (\n')
+            with patch.object(wizard, 'SOURCE', root), self.assertRaises(wizard.InstallationError) as error:
+                wizard.snapshot_bundle(os.getuid())
+            self.assertIn('app.py', str(error.exception))
+            self.assertNotIn('PRIVATE_FIXTURE_CONTENT', str(error.exception))

@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 121 desktop and 52 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 126 desktop and 52 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
@@ -30,6 +30,15 @@ is confined to that isolated harness; production uses the VPS's recursive resolv
 Only explicit TUN/NET_ADMIN access is granted to the VPN containers. They publish
 no host ports and mount no host credentials. Namespace/kernel tests fail if they
 cannot run rather than silently skipping validation.
+
+A separate Debian container, without added capabilities or host mounts, runs
+the actual interactive installer root phase with a fixture invoking UID. It
+reproduces ZIP extraction under umask 0002, checks refusal before installation,
+prepares the public sources as their ordinary owner, and verifies the real
+protected helper/profile installation and same-version rerun. It also checks
+that source preflight installs nothing and that installation leaves the resolver
+and routes unchanged. Test profile data is inert; no VPN connection is made by
+this installer job. Nonroot elevation arguments are checked separately in units.
 
 ## GitHub security review
 

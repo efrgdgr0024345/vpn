@@ -42,6 +42,32 @@ The installer-created `vpn-desk` account is a local client-machine service
 account for privilege dropping. It is not the remote VPN login account.
 The desktop firewall candidate is not a VPS firewall migration.
 
+## Kali installation acceptance finding
+
+The owner's extracted `04639eb` release stopped with `Unexpected installation
+bundle member` before installing its helper. The same GitHub ZIP was fetched
+and its installer/helper/security bytes checked against that exact Git commit.
+It supplies no Unix file modes; extraction under umask 0002 creates mode 0664
+source files. The strict source guard rejects their group-write permission.
+The error reproduced locally and the snapshot passed after removing only
+group/other write permission from the public source files.
+
+The exact released installer then passed a full interactive root-stage test in
+a disposable Debian container: refusal before source preparation, ordinary-owner
+permission preparation, real protected helper/profile installation, same-version
+rerun, and unchanged routes/resolver. The owner's existing ZIP can therefore be
+used after the documented source-only permission correction; its contents need
+not change. No VPS runtime change is needed for this client-side issue.
+
+The updated installer names the unsafe member and reason, checks source files
+before sudo as well as again as root, and makes `--check` validate source
+metadata/syntax before dependencies. A successful check explicitly says nothing
+was installed. Ownership, single-link, no-symlink and write-permission guards
+remain in place. Five regressions cover ZIP/umask behavior, preflight refusal,
+links, ownership and redacted syntax errors. GitHub now includes a real guided
+installation job in addition to the existing kernel/UI/SSH/VPN jobs; see
+TESTING.md. Physical Kali installation/connection acceptance remains pending.
+
 ## Current verified deployment (27 October 2026)
 
 The handover fix is deployed at runtime source

@@ -193,19 +193,30 @@ def install_files(directory, contents, *, mode=0o644, private=False):
 def snapshot_bundle(invoking_uid):
     names = set(HELPERS + APPLICATION + ('firewall_policy.py',))
     contents = {}
-    for name in names:
+    for name in sorted(names):
         path = SOURCE / name
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except OSError:
+            raise InstallationError('Cannot safely open installation source ' + name + '.') from None
         with os.fdopen(fd, 'rb') as stream:
             info = os.fstat(stream.fileno())
-            if (not stat.S_ISREG(info.st_mode) or info.st_size > 1_000_000 or info.st_nlink != 1
-                    or info.st_uid not in (0, invoking_uid) or info.st_mode & 0o022):
-                raise InstallationError('Unexpected installation bundle member.')
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise InstallationError('Installation source ' + name + ' must be a regular file with one link.')
+            if info.st_uid not in (0, invoking_uid):
+                raise InstallationError('Installation source ' + name + ' must belong to you or root.')
+            if info.st_mode & 0o022:
+                raise InstallationError('Installation source ' + name + ' is group/other writable. Remove group/other write permission from the extracted source files and retry.')
+            if info.st_size > 1_000_000:
+                raise InstallationError('Installation source ' + name + ' is oversized.')
             data = stream.read(1_000_001)
         if len(data) > 1_000_000:
             raise InstallationError('Installation bundle member is oversized.')
         if name.endswith('.py'):
-            compile(data, name, 'exec')
+            try:
+                compile(data, name, 'exec')
+            except SyntaxError:
+                raise InstallationError('Installation source ' + name + ' contains invalid Python syntax.') from None
         contents[name] = data
     return contents
 
@@ -364,20 +375,23 @@ def install(security, firewall_policy, contents, policy, profile):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--check', action='store_true', help='Check dependencies only; make no changes.')
+    parser.add_argument('--check', action='store_true', help='Check source files and dependencies; make no changes.')
     parser.add_argument('--root', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if sys.version_info < (3, 10) or sys.platform != 'linux':
         raise InstallationError('Linux and Python 3.10+ are required.')
     if args.check:
+        snapshot_bundle(os.getuid())
         missing = required_packages()
-        print('Missing packages: ' + ', '.join(missing) if missing else 'Required programs are available.')
+        print('Missing packages: ' + ', '.join(missing) if missing else
+              'Source files and required programs passed checks. Nothing installed; run bash install.sh to install.')
         return 2 if missing else 0
     if os.geteuid() != 0:
         if args.root:
             raise InstallationError('Root installation requires sudo authorization.')
         if not sys.stdin.isatty():
             raise InstallationError('Run bash install.sh in an interactive terminal.')
+        snapshot_bundle(os.getuid())
         print('VPN Desk will request sudo to install protected files, a dedicated account and local configuration.', flush=True)
         print('No application firewall/DNS migration or sudoers rule will be applied.', flush=True)
         return subprocess.run(['/usr/bin/sudo', '--', '/usr/bin/python3', '-I', '-B',

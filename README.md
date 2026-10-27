@@ -37,6 +37,7 @@ Install on Debian/Kali from the extracted bundle:
 
 ```sh
 cd vpn-dashboard
+find . -type f -links 1 -exec chmod go-w -- {} +
 bash install.sh
 ```
 
