@@ -28,10 +28,24 @@ malware running as that same user. No automatic personal-file deletion occurs.
 
 Both exact-commit functional and CodeQL checks gate lab mutations. Weekly
 Dependabot update proposals track GitHub Actions; PR dependency review checks
-recognized dependency changes. These do not audit Debian packages or every
+recognized dependency changes once the owner enables Dependency graph. Its first
+PR runs explicitly failed because that graph is disabled; it is not yet a working
+review result. These do not audit Debian packages or every
 transitive upstream dependency. GitHub returned 403 for owner-only security
 setting changes: repository-wide Dependabot alerts, secret scanning and push
 protection must be enabled/verified by the owner separately.
+
+## Handover follow-up
+
+A repeated integration run exposed a control-message race after the zero-finding
+static review. A deliberately delayed real broker reproduces it: an unadmitted
+token replay disconnects before its queued kill command is processed. OpenVPN's
+`management_kill_by_cid` returns failure for an absent/halted instance. The parser
+now tolerates only its exact `ERROR: client-kill command failed` reply outside
+an atomic event, with no grant or ownership-state change. Authentication and all
+other command errors still stop the broker. This is a reminder that static
+analysis does not replace runtime adversarial tests; PROJECT_STATUS.md records
+validation/deployment progress.
 
 ## Earlier client hardening
 

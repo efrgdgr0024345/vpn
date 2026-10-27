@@ -76,6 +76,29 @@ class BrokerTests(unittest.TestCase):
         self.policy.event('DISCONNECT', 1, None, {})
         self.assertEqual(len(self.clears), 1)
 
+    def test_disconnected_kill_reply_does_not_release_owner_or_hide_auth_errors(self):
+        self.connect()
+        self.establish()
+        self.policy.revoke()
+        parser = broker.Parser()
+        self.assertIsNone(parser.feed('ERROR: client-kill command failed'))
+        self.assertTrue(self.policy.stopping)
+        self.assertEqual(self.policy.owner['cid'], 1)
+        self.assertEqual(self.clears, [True])
+        self.connect(cid=2, device='iphone')
+        self.assertTrue(self.commands[-1].startswith('client-deny 2 '))
+        self.policy.event('DISCONNECT', 1, None, {})
+        self.connect(cid=2, device='iphone')
+        self.establish(2, '172.27.240.11')
+        self.assertEqual(self.grants, ['172.27.240.10', '172.27.240.11'])
+        for reply in ('ERROR: client-auth command failed', 'ERROR: client-deny command failed',
+                      'ERROR: client-kill command failed extra', 'ERROR: unsupported command'):
+            with self.subTest(reply=reply), self.assertRaises(broker.BrokerError):
+                parser.feed(reply)
+        parser.feed('>CLIENT:CONNECT,3,1')
+        with self.assertRaises(broker.BrokerError):
+            parser.feed('ERROR: client-kill command failed')
+
     def test_unadmitted_token_reconnect_or_wrong_ip_never_gets_forwarding(self):
         self.establish()
         self.assertFalse(self.grants)

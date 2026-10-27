@@ -42,6 +42,27 @@ The installer-created `vpn-desk` account is a local client-machine service
 account for privilege dropping. It is not the remote VPN login account.
 The desktop firewall candidate is not a VPS firewall migration.
 
+## Follow-up handover regression
+
+A repeat of the documentation-only `ed315d6` snapshot failed in
+[main CI 40448588470](https://github.com/efrgdgr0024345/vpn/actions/runs/40448588470)
+with ownership transfer not completing. Investigation reproduced a broker exit
+using the real engine: pause the broker, establish a token-only replay with no
+forwarding grant, disconnect that replay, wait for OpenVPN's five-second peer
+retirement, and resume the broker. Its queued rejection then receives
+`ERROR: client-kill command failed` because that client is already gone. Treating
+that reply as a generic fatal error stops the broker and leaves the container's
+server held. It is distinct from an authentication rejection.
+
+The source handles only that exact already-gone reply. Other command errors
+remain fatal; owner/reservation release still requires a matching disconnect.
+A regression verifies this boundary, and the packet test now forces the ordering
+and checks that the original broker survives without a service restart. The test
+also waits for the previous retired peer before starting another handshake,
+so it does not abandon a half-open replay in the global slot. The new source is
+under validation; the deployed source and completed evidence remain recorded
+below and in deployments/vpn-lab.json until a gated update succeeds.
+
 ## Current owned-client and private-DNS acceptance (27 October 2026)
 
 Runtime source `b9917442c0d342d7bab2eb01e4d80e6e81ba7e01` passed all four
@@ -49,8 +70,10 @@ Runtime source `b9917442c0d342d7bab2eb01e4d80e6e81ba7e01` passed all four
 including 171 unit tests per Ubuntu job, real kernel/UI/IPC, SSH/SFTP and VPN
 integration. [Main CodeQL analysis](https://github.com/efrgdgr0024345/vpn/actions/runs/40447778310)
 reported zero findings after reviewed issues were fixed without suppression.
-PR dependency review and weekly GitHub Actions update proposals complement it;
-owner-only repository security settings remain separately pending.
+Weekly GitHub Actions update proposals are working and opened their first PRs.
+PR dependency review is configured but its first runs report that Dependency
+graph is disabled. The owner must enable it; other owner-only repository security
+settings remain separately pending.
 
 [Gated installation](https://github.com/efrgdgr0024345/vpn/actions/runs/40447778025)
 deployed that source and preserved the existing credentials/device identities.

@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 121 desktop and 50 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 121 desktop and 51 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
@@ -20,7 +20,9 @@ files. It does not change the runner's host resolver or default route.
 Separate digest-pinned Debian 13 containers exercise real OpenSSH/SFTP safeguards,
 certificates, PAM, OpenVPN, private DNS and NAT. VPN tests check competing owners,
 unapproved pins, token renewal/replay, frozen-broker lease expiry, revocation and
-disconnect-before-transfer. The app supervisor is also exercised with the real
+disconnect-before-transfer. A delayed-broker replay forces disconnect-before-kill
+ordering and checks that the original broker survives; other management errors
+remain fatal. The app supervisor is also exercised with the real
 engine and authenticated local IPC. Its network monitor is substituted there;
 the separate network-namespace test covers the actual client guard. Synthetic DNS
 is confined to that isolated harness; production uses the VPS's recursive resolver.
@@ -35,7 +37,9 @@ cannot run rather than silently skipping validation.
 on pushes, PRs, manual dispatch and weekly. Medium/higher security-severity and
 error-level findings fail the scan. Controlled rule/location summaries expose
 findings without copying raw runtime data. PR dependency changes get GitHub's
-dependency review, and weekly Dependabot proposals track pinned GitHub Actions.
+dependency review once the owner enables GitHub's Dependency graph. Its first
+PR runs are blocked by that setting; the workflow does not skip the failure.
+Weekly Dependabot proposals track pinned GitHub Actions and are working.
 These jobs have no lab environment or private SSH/profile data.
 
 Both functional and security workflows must succeed for the exact source commit

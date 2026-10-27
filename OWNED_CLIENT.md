@@ -78,7 +78,10 @@ security-and-quality queries on pushes/PRs, with scheduled analysis as well.
 Medium/higher CodeQL security severity and error-level findings fail the scan.
 Both functional and security workflows must succeed for the exact source commit
 before lab mutations get an SSH secret. PR dependency changes get GitHub's
-dependency review; weekly Dependabot proposals track GitHub Actions revisions.
+dependency review is configured, but its first PR runs report that Dependency
+graph must be enabled by the repository owner. Weekly Dependabot proposals
+track GitHub Actions revisions and are working; those proposals are not
+automatically merged.
 This does not scan the entire VPS/phone OS or upstream engine
 source as if it were part of this Python repository.
 

@@ -90,6 +90,15 @@ class Parser:
     def feed(self, line):
         if len(line) > 16384:
             raise BrokerError('Oversized management line.')
+        if line.startswith('ERROR:'):
+            # OpenVPN's management_kill_by_cid returns false only when the
+            # instance is absent/already halted. A queued ESTABLISHED can race
+            # the peer's exit notification, leaving nothing to kill. This reply
+            # never grants access or releases an owner/reservation. All other
+            # command errors, including authentication failures, remain fatal.
+            if line == 'ERROR: client-kill command failed' and self.event is None:
+                return None
+            raise BrokerError('Management command rejected.')
         if line.startswith('>BYTECOUNT_CLI:'):
             fields = line.split(':', 1)[1].split(',')
             if len(fields) != 3 or not all(re.fullmatch(r'[0-9]{1,20}', v) for v in fields):
@@ -301,8 +310,6 @@ def serve():
                     raise BrokerError('Management input overflow.')
                 while b'\n' in buffer:
                     line, buffer = buffer.split(b'\n', 1)
-                    if line.startswith(b'ERROR:'):
-                        raise BrokerError('Management command rejected.')
                     event = parser.feed(line.rstrip(b'\r').decode('utf-8', errors='strict'))
                     if event:
                         policy.event(*event)
@@ -313,7 +320,12 @@ def serve():
 if __name__ == '__main__':
     try:
         main()
-    except (BrokerError, OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError):
+    except (BrokerError, OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as error:
         # No raw management lines, env values, passwords or tokens in journals.
-        print('VPN authorization broker stopped; forwarding lease is denied or expiring.', flush=True)
+        reason = {
+            'Management command rejected.': 'management_command_rejected',
+            'Management channel closed.': 'management_channel_closed',
+            'Forwarding lease update failed.': 'forwarding_update_failed',
+        }.get(str(error), 'local_verification_failed')
+        print('VPN authorization broker stopped; forwarding lease is denied or expiring. reason=' + reason, flush=True)
         raise SystemExit(1)

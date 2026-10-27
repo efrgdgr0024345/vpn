@@ -64,6 +64,11 @@ def main():
             print(json.dumps(server_selftest.test(broker.pid),sort_keys=True),flush=True)
             PHASE='owned app supervisor'
             client_control_smoke.supervisor_with_real_openvpn()
+        except Exception:
+            print('::notice title=VPN lab daemon state::'+json.dumps({
+                'server_exit':server.poll(),'broker_exit':broker.poll(),
+                'resolver_exit':resolver.poll()},sort_keys=True),flush=True)
+            raise
         finally:
             PHASE='daemon cleanup after '+PHASE
             if resolver.poll() is None:

@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import resource
 import secrets
+import select
 import signal
 import socket
 import stat
@@ -118,7 +119,8 @@ def test(broker_pid=None):
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid,signal.SIGKILL)
                 process.wait()
-    with tempfile.TemporaryDirectory(prefix='vpn-lab-test-',dir='/run') as directory:
+    with tempfile.TemporaryDirectory(prefix='vpn-lab-test-',dir='/run') as directory, \
+            os.fdopen(os.pidfd_open(broker_pid),'rb') as broker_handle:
         root=Path(directory)
         def start(name,password,device='kali'):
             selected=profile if device=='kali' else read_private('/root/vpn-lab/devices/'+device+'/client.ovpn')
@@ -328,13 +330,13 @@ def test(broker_pid=None):
                 # The broker is frozen rather than cleanly stopped: no cleanup
                 # handler can hide a missing kernel timeout. Established flows
                 # must lose access in both directions once the set expires.
-                os.kill(broker_pid,signal.SIGSTOP)
+                signal.pidfd_send_signal(broker_handle.fileno(),signal.SIGSTOP)
                 try:
                     time.sleep(22)
                     if public_dns():
                         raise TestFailure('Forwarding survived an expired kernel lease.')
                 finally:
-                    os.kill(broker_pid,signal.SIGCONT)
+                    signal.pidfd_send_signal(broker_handle.fileno(),signal.SIGCONT)
                 # A resumed broker must reject stale queued liveness events.
                 end=time.monotonic()+5
                 while time.monotonic()<end and good.poll() is None:
@@ -342,16 +344,28 @@ def test(broker_pid=None):
                 stop(good)
             finally:
                 channel.close()
-            time.sleep(1)
-            replay,replaylog=start('lab-replay',token)
-            initialized(replay,replaylog,6)
-            # A valid token from a previous CID must never create a new kernel
-            # grant, even if OpenVPN briefly reports transport establishment.
-            elements=json.loads(command(['/usr/sbin/nft','-j','list','set','inet','vpn_lab','authorized']))
-            if any(item.get('set',{}).get('elem') for item in elements['nftables']):
-                raise TestFailure('A replayed session token obtained a forwarding grant.')
-            stop(replay)
-            time.sleep(1)
+            # OpenVPN schedules peer retirement five seconds after HALT/EXIT.
+            # Let the old transport actually retire before testing another one;
+            # killing a half-open replay would otherwise occupy max-clients.
+            time.sleep(6)
+            # Force the disconnect-before-kill ordering rather than relying on
+            # runner scheduling to expose it. A valid old token can establish
+            # transport internally, but the stopped broker cannot grant packets.
+            signal.pidfd_send_signal(broker_handle.fileno(),signal.SIGSTOP)
+            try:
+                replay,replaylog=start('lab-replay',token)
+                if not initialized(replay,replaylog,20):
+                    raise TestFailure('The replay transport did not reach the stale-command test.')
+                elements=json.loads(command(['/usr/sbin/nft','-j','list','set','inet','vpn_lab','authorized']))
+                if any(item.get('set',{}).get('elem') for item in elements['nftables']):
+                    raise TestFailure('A replayed session token obtained a forwarding grant.')
+                stop(replay)
+                time.sleep(6)
+            finally:
+                signal.pidfd_send_signal(broker_handle.fileno(),signal.SIGCONT)
+            time.sleep(.5)
+            if select.select([broker_handle],[],[],0)[0]:
+                raise TestFailure('The broker exited during a disconnected replay rejection.')
             phone,phonelog=start('lab-phone',values[1],'iphone')
             if not initialized(phone,phonelog,20):
                 raise TestFailure('Ownership could not transfer to the next enrolled device.')
@@ -394,6 +408,8 @@ def test(broker_pid=None):
             finally:
                 channel.close()
                 update_registry(policy_before)
+            if select.select([broker_handle],[],[],0)[0]:
+                raise TestFailure('The original broker did not survive the complete acceptance test.')
             return {'correct_credentials_connect':True,'wrong_password_rejected':True,
                     'ipv4_dns_roundtrip_through_vpn_and_nat':True,
                     'metadata_private_network_packet_dropped':True,
@@ -403,6 +419,7 @@ def test(broker_pid=None):
                     'kernel_lease_expires_when_broker_frozen':True,
                     'ownership_transfers_between_devices':True,'device_revocation_denies_forwarding':True,
                     'replayed_session_token_denied':True,
+                    'disconnected_replay_preserves_broker':True,
                     'normal_disconnect_releases_slot':True,
                     'private_vpn_resolver_answers':True,
                     'host_routes_and_resolver_modified':False,
