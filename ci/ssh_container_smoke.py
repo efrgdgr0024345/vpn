@@ -55,7 +55,7 @@ X11Forwarding no
     try:
         lab_admin.execute('inventory', settings)
     except lab_admin.LabError as exc:
-        if 'SSH inventory failed' not in str(exc):
+        if 'SSH authentication rejected' not in str(exc):
             raise
     else:
         raise SystemExit('Expired runner key was accepted.')
