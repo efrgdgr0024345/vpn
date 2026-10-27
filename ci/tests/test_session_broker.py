@@ -55,7 +55,7 @@ class BrokerTests(unittest.TestCase):
         self.establish()
         self.establish(2, '172.27.240.11')
         self.assertEqual(self.grants, ['172.27.240.10'])
-        self.assertEqual(self.commands[-1], 'client-kill 2\n')
+        self.assertEqual(self.commands[-1], 'client-kill 2 "AUTH_FAILED,SESSION"\n')
 
     def test_active_owner_cannot_be_displaced_or_cleared_by_unrelated_disconnect(self):
         self.connect()
@@ -99,7 +99,7 @@ class BrokerTests(unittest.TestCase):
         self.policy.event('LIVE', 1, None, {})
         self.assertEqual(len(self.grants), 1)
         self.assertTrue(self.clears)
-        self.assertEqual(self.commands[-1], 'client-kill 1\n')
+        self.assertEqual(self.commands[-1], 'client-kill 1 "HALT,VPN authorization ended"\n')
         self.connect(cid=2, device='iphone')
         self.assertTrue(self.commands[-1].startswith('client-deny'))
 

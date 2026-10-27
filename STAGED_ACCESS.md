@@ -24,6 +24,11 @@ server or phone has been updated.
    fresh broker admission: establishment without an approved pending client ID
    is killed without receiving a forwarding grant.
 
+A token-only reconnect receives `AUTH_FAILED,SESSION`, instructing clients to
+discard the old token and use initial authentication again. Revocation/expiry
+uses a `HALT` message so a disabled session does not enter an automatic retry
+loop. Phone-specific handling of these messages is part of device acceptance.
+
 The two stages occur within one tunnel; there is no account/password rotation
 and no second tunnel. The restricted stage is the authentication phase with no
 data forwarding, rather than a browser-accessible bootstrap network. Standard

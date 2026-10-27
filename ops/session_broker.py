@@ -136,10 +136,17 @@ class Policy:
     def deny(self, cid, kid):
         self.send(f'client-deny {cid} {kid} "Access denied" "Access denied"\n')
 
+    def kill(self, cid, token_reconnect=False):
+        # A bare RESTART retains the session token on some clients. Tell a new
+        # token-only connection to discard it and authenticate again; a revoked
+        # or expired owner receives HALT instead of retrying forever.
+        message = 'AUTH_FAILED,SESSION' if token_reconnect else 'HALT,VPN authorization ended'
+        self.send(f'client-kill {cid} "{message}"\n')
+
     def revoke(self):
         self.clear()  # Never release ownership until packet access is removed.
         if self.owner:
-            self.send(f'client-kill {self.owner["cid"]}\n')
+            self.kill(self.owner['cid'])
             self.stopping = True
 
     def event(self, kind, cid, kid, environment):
@@ -167,7 +174,7 @@ class Policy:
             if (not self.pending or self.pending['cid'] != cid or self.pending['cancelled']
                     or self.owner or self.stopping
                     or environment.get('ifconfig_pool_remote_ip') != self.pending['address']):
-                self.send(f'client-kill {cid}\n')
+                self.kill(cid, token_reconnect=True)
                 return
             # PAM and OpenVPN TLS must both have succeeded before ESTABLISHED.
             # No forwarding is granted while admission is only pending.
@@ -199,7 +206,7 @@ class Policy:
                              or any(devices[self.pending['device']][key] != self.pending[key]
                                     for key in ('sha256', 'cn', 'address'))):
             if not self.pending['cancelled']:
-                self.send(f'client-kill {self.pending["cid"]}\n')
+                self.kill(self.pending['cid'])
                 self.pending['cancelled'] = True
             # Retain the reservation until the daemon confirms DISCONNECT.
         if self.owner and not self.stopping:
