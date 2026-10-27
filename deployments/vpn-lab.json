@@ -1,33 +1,41 @@
 {
   "environment": "vpn-lab",
-  "stage": "single-account OpenVPN foundation",
-  "deployed_source_commit": "81aa80f0f60adafa91e0613fb87e62fe25fbe437",
+  "stage": "single-tunnel staged access; controlled device acceptance ready",
+  "deployed_source_commit": "f7de4dd1629c827e92c1573ba5d1d26153202cf1",
   "os": "Debian 13",
-  "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40276817573",
-  "live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40277258126",
-  "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40273151402",
-  "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40276816860",
-  "client_transfer": "Chrooted read-only SFTP helper tested; owner public-key enrollment pending.",
+  "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431184235",
+  "live_packet_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431541188",
+  "reboot": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431275049",
+  "post_reboot_inventory": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431424970",
+  "observed_post_reboot_uptime_seconds": 68,
+  "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431775566",
+  "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40431176614",
+  "unit_tests_per_ubuntu_job": 152,
+  "client_transfer": "Device-selecting chrooted read-only SFTP tested; owner public-key enrollment pending.",
   "validated": [
-    "VPN service active",
-    "one obsolete self-hosted runner service retired",
-    "correct certificate/password login",
-    "wrong password rejected",
-    "DNS roundtrip through encrypted VPN and NAT",
+    "native VPN and broker services recover automatically after reboot",
+    "persistent default-drop input and forwarding firewall",
+    "separate approved Kali, iPhone and Android certificate identities exercised with Linux clients",
+    "correct certificate/password login; wrong password and unapproved certificate pin rejected",
+    "server-issued token reauthentication without original password file",
+    "old-token-only new connection cannot obtain forwarding permission",
+    "one global main session; competing device cannot displace owner",
+    "kernel forwarding lease expires during frozen broker without cleanup",
+    "ownership transfers between enrolled certificate identities",
+    "normal disconnect promptly releases slot",
+    "revoked device loses packet forwarding",
+    "DNS roundtrip through encrypted VPN and IPv4 NAT",
     "private-network and cloud-metadata packet dropped",
-    "IPv6 block response",
-    "second login rejected without displacing active session",
-    "external UDP 1194 reaches the server"
+    "IPv6 client block response",
+    "external UDP 1194 reaches the rebooted server"
   ],
   "not_yet_validated": [
-    "physical Kali client and resolver integration",
-    "client kill switch and physical-interface leak testing",
-    "reboot recovery"
+    "physical Kali installation, resolver and firewall integration",
+    "physical iPhone and Android app import and session-token behavior",
+    "client kill switch and physical-interface IPv4/IPv6/DNS leak testing",
+    "physical mobile network changes, sleep/resume and reconnect behavior"
   ],
-  "not_yet_implemented": [
-    "restricted bootstrap authorization broker",
-    "registered-device grant redemption",
-    "automated staged credential handoff"
-  ],
-  "private_material": "Retained on the server; no keys, passwords or real profiles in this record."
+  "selected_design": "One tunnel, separate device keys, one global session, disconnect-before-transfer. No literal two-tunnel handoff.",
+  "device_key_limit": "Keys originate on the server and are exported in private profiles; no hardware attestation or nonexportability claim.",
+  "private_material": "Retained on the server; no keys, passwords, tokens or real profiles in this record."
 }

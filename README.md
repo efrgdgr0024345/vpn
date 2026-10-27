@@ -12,6 +12,9 @@ account, standard hidden OpenVPN session tokens and an expiring kernel forwardin
 grant. See the deployment record for what has actually been deployed; physical
 phone and Kali validation remains separate. [Mobile support](MOBILE_SUPPORT.md)
 records the selected client approach and its limits.
+The lab has passed live acceptance after reboot. [Device testing](DEVICE_TESTING.md)
+is now the next phase; physical mobile compatibility and client leak protection
+remain to be verified.
 
 A local Linux desktop dashboard for read-only network diagnostics and explicit
 terminal-authenticated OpenVPN startup. The application is in

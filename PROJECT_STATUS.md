@@ -10,8 +10,9 @@ Current priority: the owner has resumed staged-access development and requested
 GitHub/disposable-server validation before local testing. Add iPhone and Android
 support with one main VPN session across the whole account. The owner selected
 direct device enrollment, one-tunnel staged access and disconnect-before-transfer.
-The broker, kernel lease and separate profiles are now implemented in source
-and undergoing isolated verification; see STAGED_ACCESS.md. The existing Access Server remains outside the deployment
+The broker, kernel lease and separate profiles are implemented, deployed and
+verified on the lab, including reboot recovery; see STAGED_ACCESS.md and the
+current acceptance evidence below. The existing Access Server remains outside the deployment
 scope; custom password suffixes, bootloader work and custom cryptography remain
 deferred. Earlier statements that all staged development is paused are historical.
 
@@ -26,6 +27,42 @@ deferred. Earlier statements that all staged development is paused are historica
 The installer-created `vpn-desk` account is a local client-machine service
 account for privilege dropping. It is not the remote VPN login account.
 The desktop firewall candidate is not a VPS firewall migration.
+
+## Current staged-access acceptance (27 October 2026)
+
+The selected system is implemented and deployed at runtime commit
+`f7de4dd1629c827e92c1573ba5d1d26153202cf1`. It uses one tunnel, separately
+enrolled Kali/iPhone/Android certificate identities, standard hidden session
+tokens and one global main session. The root-local management broker admits
+only an approved certificate pin; forwarding requires a short kernel lease.
+Literal two-tunnel handoff, hardware attestation and a custom mobile app are
+not claimed.
+
+- [Main-branch CI 40431176614](https://github.com/efrgdgr0024345/vpn/actions/runs/40431176614)
+  passed all four jobs: 109 desktop and 43 lab/broker/admin unit tests per Ubuntu
+  job, real Tk/nft checks, real Debian SSH/SFTP including mobile-profile selection,
+  and actual Debian VPN/PAM/firewall/token packet integration.
+- [Gated installation 40431184235](https://github.com/efrgdgr0024345/vpn/actions/runs/40431184235)
+  deployed that exact runtime commit and confirmed the native VPN service active.
+- [Reboot 40431275049](https://github.com/efrgdgr0024345/vpn/actions/runs/40431275049)
+  and [post-boot inventory 40431424970](https://github.com/efrgdgr0024345/vpn/actions/runs/40431424970)
+  verified a fresh kernel uptime of 68 seconds, both VPN/broker services running,
+  and persistent default-drop input/forward chains in the two firewall tables.
+- [Post-reboot live acceptance 40431541188](https://github.com/efrgdgr0024345/vpn/actions/runs/40431541188)
+  passed all checks: initial password/certificate login, bad-password and unapproved
+  pin rejection, token reauthentication without the original password file,
+  old-token replay denial, single-session contention without displacement,
+  kernel lease expiry during a frozen broker, transfer between enrolled keys,
+  prompt release on normal disconnect, device revocation, encrypted DNS/NAT,
+  metadata/private-network filtering and the client IPv6 block response.
+
+The private test credentials stayed on the server. The tests created temporary
+unconfigured TUNs and did not modify host default routes or the resolver.
+The previous working Access Server was not modified. The current boundary is
+actual client acceptance: physical Kali DNS/firewall integration and real iPhone/
+Android app import, roaming, suspend and leak behavior. Further server feature
+work is deferred until those tests. DEVICE_TESTING.md records the next steps;
+the owner's dedicated download public key is needed for private profile transfer.
 
 ## Reconstructed work history
 
@@ -322,6 +359,6 @@ shell history and this public project. Verify one real VPN login before changing
 connection limits, account permissions or administrative access. Review patches
 and the reported reboot requirement after recovery is established.
 
-The audit itself made no runtime changes. The subsequent certificate-name fix
-changes only local client validation and tests. New VPN feature work remains
-paused, and no live VPS settings or credentials have been changed here.
+That original audit made no changes to the Access Server. Subsequent lab
+deployment and the resumed staged-access work are recorded above; they must
+not be confused with recovery or migration of the separate Access Server.
