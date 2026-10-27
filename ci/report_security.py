@@ -4,6 +4,7 @@ Do not print raw code, snippets or diagnostic messages that could contain a
 mistakenly committed secret. The complete findings remain in GitHub CodeQL.
 """
 import json
+import math
 from pathlib import Path,PurePosixPath
 import re
 import sys
@@ -28,6 +29,8 @@ def summaries(document):
                 severity=float(properties.get('security-severity',-1))
             except (ValueError,TypeError):
                 severity=-1
+            if not math.isfinite(severity) or not -1<=severity<=10:
+                severity=-1
             blocking=severity>=4 or result.get('level')=='error'
             location=next(iter(result.get('locations',[])),{}).get('physicalLocation',{})
             uri=unquote(location.get('artifactLocation',{}).get('uri',''))
@@ -48,12 +51,15 @@ def main():
     if not paths or len(paths)>10:
         raise SystemExit('::error title=Security analysis::CodeQL results are missing or unsupported.')
     count=blocked=0
+    recorded=[]
     for path in paths:
         if path.stat().st_size>20_000_000:
             raise SystemExit('::error title=Security analysis::CodeQL results exceed the reporting limit.')
         for row in summaries(json.loads(path.read_text())):
             count+=1
             blocked+=row['blocking']
+            if len(recorded)<100:
+                recorded.append(row)
             if count<=100:
                 kind='error' if row['blocking'] else 'warning'
                 location=('file='+row['file']+',line='+str(row['line'])+',') if row['file'] else ''
@@ -61,7 +67,14 @@ def main():
                 if row['suppressed']:
                     note+=' The result is marked suppressed in SARIF.'
                 print('::'+kind+' '+location+'title=CodeQL finding::'+note,flush=True)
-    print(json.dumps({'codeql_findings':count,'blocking_findings':blocked},sort_keys=True))
+    report={'codeql_findings':count,'blocking_findings':blocked,'findings':recorded,
+            'truncated':count>len(recorded)}
+    encoded=json.dumps(report,sort_keys=True,separators=(',',':'))
+    if len(encoded.encode())>60000:
+        raise SystemExit('::error title=Security analysis::Controlled analysis summary exceeds its limit.')
+    # GitHub limits individual workflow-command annotations per step. One
+    # bounded structured notice preserves the complete controlled finding list.
+    print('::notice title=Security analysis summary::'+encoded.replace('%','%25'),flush=True)
     return 1 if blocked else 0
 
 

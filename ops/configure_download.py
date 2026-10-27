@@ -79,10 +79,10 @@ Match User {USER}
 def export_file(path,value,uid,gid):
     try:
         info=path.lstat()
-        if not stat.S_ISREG(info.st_mode) or info.st_uid not in (0,uid) or info.st_nlink!=1:
-            raise server.SetupError('Unsafe existing download file.')
     except FileNotFoundError:
-        pass
+        info=None
+    if info is not None and (not stat.S_ISREG(info.st_mode) or info.st_uid not in (0,uid) or info.st_nlink!=1):
+        raise server.SetupError('Unsafe existing download file.')
     fd,temporary=tempfile.mkstemp(prefix='.vpn-download-',dir=path.parent)
     try:
         with os.fdopen(fd,'w') as stream:

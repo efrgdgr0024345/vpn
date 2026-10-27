@@ -36,8 +36,9 @@ def checksum(data):
     return (~value)&65535
 
 
-def dns_packet(source,destination,port,identifier,ipv6=False):
-    dns=struct.pack('!6H',identifier,0x0100,1,0,0,0)+b'\x07example\x03com\0'+struct.pack('!HH',1,1)
+def dns_packet(source,destination,port,identifier,ipv6=False,root_query=False):
+    question=b'\0'+struct.pack('!HH',2,1) if root_query else b'\x07example\x03com\0'+struct.pack('!HH',1,1)
+    dns=struct.pack('!6H',identifier,0 if root_query else 0x0100,1,0,0,0)+question
     udp=struct.pack('!HHHH',port,53,8+len(dns),0)+dns
     if ipv6:
         src,dst=socket.inet_pton(socket.AF_INET6,source),socket.inet_pton(socket.AF_INET6,destination)
@@ -224,7 +225,10 @@ def test(broker_pid=None):
                 def public_dns():
                     identifier=secrets.randbelow(65536)
                     port=35000+secrets.randbelow(20000)
-                    packet=dns_packet(source,'9.9.9.9',port,identifier)
+                    # Ask a root authoritative nameserver about the root zone.
+                    # This tests Internet NAT, not a third-party recursive VPN
+                    # DNS provider. In CI this address is a local simulator.
+                    packet=dns_packet(source,'198.41.0.4',port,identifier,root_query=True)
                     end=time.monotonic()+8
                     retry=0.0
                     while time.monotonic()<end:
@@ -252,6 +256,29 @@ def test(broker_pid=None):
                     return False
                 if not public_dns():
                     raise TestFailure('DNS roundtrip through VPN forwarding/NAT failed.')
+                # Query the VPS-owned resolver, not a client-side public DNS
+                # service. The existing public fixture also tests IPv4 NAT.
+                identifier=secrets.randbelow(65536)
+                channel.send(dns_packet(source,'172.27.240.1',35005,identifier))
+                private_dns=False
+                end=time.monotonic()+8
+                while time.monotonic()<end:
+                    try:
+                        reply,address=channel.recvfrom(4096)
+                    except socket.timeout:
+                        continue
+                    if address[2]==socket.PACKET_OUTGOING or not reply or reply[0]>>4!=4:
+                        continue
+                    offset=(reply[0]&15)*4
+                    if (len(reply)>=offset+20 and reply[9]==17
+                            and reply[12:16]==socket.inet_aton('172.27.240.1')
+                            and struct.unpack('!HH',reply[offset:offset+4])==(53,35005)):
+                        transaction,flags=struct.unpack('!HH',reply[offset+8:offset+12])
+                        if transaction==identifier and flags&0x8000 and flags&15==0:
+                            private_dns=True
+                            break
+                if not private_dns:
+                    raise TestFailure('The private VPN resolver did not answer an authorized query.')
                 # Remove the initial password file and force a real TLS rekey.
                 # Reauthentication must use the server-issued token, not reread
                 # the known password from disk after dropping privileges.
@@ -278,7 +305,7 @@ def test(broker_pid=None):
                 ipv6=re.search(r'ifconfig-ipv6 ([0-9a-f:]+)/64',text,re.I)
                 if not ipv6:
                     raise TestFailure('IPv6 confinement options were not received.')
-                channel.send(dns_packet(ipv6.group(1),'2001:4860:4860::8888',35002,2345,True))
+                channel.send(dns_packet(ipv6.group(1),'2001:db8::53',35002,2345,True))
                 blocked=False
                 end=time.monotonic()+3
                 while time.monotonic()<end:
@@ -377,6 +404,7 @@ def test(broker_pid=None):
                     'ownership_transfers_between_devices':True,'device_revocation_denies_forwarding':True,
                     'replayed_session_token_denied':True,
                     'normal_disconnect_releases_slot':True,
+                    'private_vpn_resolver_answers':True,
                     'host_routes_and_resolver_modified':False,
                     'credentials_exported':False}
         finally:

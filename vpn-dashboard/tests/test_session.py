@@ -1,4 +1,5 @@
 import unittest
+import inspect
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -46,7 +47,7 @@ class SessionTests(unittest.TestCase):
 
     def test_caller_cannot_select_a_home_profile(self):
         with self.assertRaises(TypeError):
-            session.openvpn_argv('/home/user/droplet-vpn.ovpn')
+            inspect.signature(session.openvpn_argv).bind('/home/user/droplet-vpn.ovpn')
 
     @patch('vpn_session_helper.load_policy', side_effect=portal_helper.Refused('missing protected policy'))
     @patch('vpn_session_helper.subprocess.Popen')

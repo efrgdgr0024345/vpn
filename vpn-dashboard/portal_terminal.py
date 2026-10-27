@@ -29,7 +29,7 @@ def main():
     try:
         input('\nPress Enter to close this terminal. ')
     except (EOFError, KeyboardInterrupt):
-        pass
+        return code
     return code
 
 if __name__ == '__main__':

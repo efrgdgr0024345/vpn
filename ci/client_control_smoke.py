@@ -62,7 +62,7 @@ def supervisor_with_real_openvpn():
                 try:
                     channel.request('stop')
                 except (OSError,channel.ChannelError):
-                    pass
+                    process.poll()  # It may already have exited and removed its socket.
                 try:
                     process.wait(timeout=15)
                 except subprocess.TimeoutExpired:

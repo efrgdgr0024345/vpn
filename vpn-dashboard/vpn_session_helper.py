@@ -7,7 +7,6 @@ import stat
 import select
 import signal
 import subprocess
-import sys
 import time
 import session_channel
 import network_setup

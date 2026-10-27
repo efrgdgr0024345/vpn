@@ -62,7 +62,7 @@ def bounded_run(argv, *, input=None, timeout=6, check=False, text=True,
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
-            pass
+            process.poll()  # Reap an already exited owned child, if available.
         process.wait()
         raise
     finally:

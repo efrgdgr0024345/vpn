@@ -121,6 +121,8 @@ table inet vpn_lab {{
  chain input {{
   type filter hook input priority 0; policy drop;
   iifname "lo" accept
+  iifname "tun-lab" ip saddr @authorized ip daddr 172.27.240.1 udp dport 53 counter accept comment "vpn-lab-private-dns"
+  iifname "tun-lab" ip saddr @authorized ip daddr 172.27.240.1 tcp dport 53 counter accept
   iifname "tun-lab" counter drop comment "vpn-lab-block-host"
   ct state invalid drop
   ct state established,related accept
@@ -187,8 +189,7 @@ user {TRANSPORT}
 group {TRANSPORT}
 push "redirect-gateway def1 ipv6"
 push "block-ipv6"
-push "dhcp-option DNS 9.9.9.9"
-push "dhcp-option DNS 149.112.112.112"
+push "dhcp-option DNS 172.27.240.1"
 push "explicit-exit-notify 1"
 verb 3
 '''
@@ -221,6 +222,34 @@ verb 3
             value = value[value.index(begin):value.index(end)+len(end)]
         lines += '<'+name+'>\n'+value.strip()+'\n</'+name+'>\n'
     return lines
+
+
+def resolver_configuration(container_test=False):
+    # Production resolves recursively: no public forwarding resolver/vendor.
+    # Only the isolated test harness uses its synthetic DNS fixture.
+    value='''server:
+    interface: 172.27.240.1
+    ip-freebind: yes
+    access-control: 0.0.0.0/0 refuse
+    access-control: 172.27.240.0/24 allow
+    do-ip6: no
+    hide-identity: yes
+    hide-version: yes
+    qname-minimisation: yes
+    harden-glue: yes
+    harden-dnssec-stripped: yes
+    use-caps-for-id: yes
+    verbosity: 0
+    log-queries: no
+    log-replies: no
+'''
+    if container_test:
+        value+='''    module-config: "iterator"
+forward-zone:
+    name: "."
+    forward-addr: 198.41.0.4
+'''
+    return value
 
 
 def enroll_devices(endpoint):
@@ -391,7 +420,7 @@ def install(endpoint, ssh_port, container_test=False):
         STAGE='distribution packages'
         run(['/usr/bin/apt-get','update'],timeout=600)
         run(['/usr/bin/apt-get','install','--yes','--no-install-recommends',
-             'openvpn','easy-rsa','openssl','nftables','iproute2','passwd','ca-certificates'],timeout=900)
+             'openvpn','easy-rsa','openssl','nftables','iproute2','passwd','ca-certificates','unbound','dns-root-data'],timeout=900)
         routes=json.loads(run(['/usr/sbin/ip','-j','-4','route','show']))
         defaults=[r for r in routes if r.get('dst')=='default' and r.get('dev')]
         if len(defaults)!=1:
@@ -457,6 +486,9 @@ account required pam_unix.so
         directory('/etc/openvpn/server')
         write('/etc/openvpn/server/vpn-lab.conf',server_configuration(candidates[0]))
         write('/etc/openvpn/server/vpn-lab-crl.pem',read_owned(PKI/'crl.pem'),0o644)
+        write('/etc/unbound/unbound.conf.d/vpn-lab.conf',resolver_configuration(container_test),0o644)
+        run(['/usr/libexec/unbound-helper','root_trust_anchor_update'])
+        run(['/usr/sbin/unbound-checkconf'])
         write(EXPORT/'client.ovpn',client_configuration(endpoint))
         enroll_devices(endpoint)
         broker=globals().get('BROKER_SOURCE')
@@ -476,7 +508,7 @@ account required pam_unix.so
         if notices:
             write('/usr/local/share/doc/vpn-lab/THIRD_PARTY_NOTICES.md',notices,0o644)
         versions=run(['/usr/bin/dpkg-query','-W','-f=${Package}\t${Version}\n',
-                      'openvpn','easy-rsa','openssl','nftables','libpam-modules','python3'])
+                      'openvpn','easy-rsa','openssl','nftables','libpam-modules','python3','unbound','dns-root-data'])
         write('/usr/local/share/doc/vpn-lab/package-versions.txt',versions,0o644)
         STAGE='firewall validation and recovery snapshot'
         candidate=CONFIG/'nftables.candidate'
@@ -557,9 +589,11 @@ LockPersonality=yes
 WantedBy=multi-user.target
 ''',0o644)
             run(['/usr/bin/systemctl','daemon-reload'])
-            run(['/usr/bin/systemctl','enable','nftables.service','vpn-lab-broker.service','openvpn-server@vpn-lab.service'])
+            run(['/usr/bin/systemctl','enable','nftables.service','vpn-lab-broker.service','openvpn-server@vpn-lab.service','unbound.service'])
             run(['/usr/bin/systemctl','restart','openvpn-server@vpn-lab.service'])
             run(['/usr/bin/systemctl','is-active','--quiet','openvpn-server@vpn-lab.service'])
+            run(['/usr/bin/systemctl','restart','unbound.service'])
+            run(['/usr/bin/systemctl','is-active','--quiet','unbound.service'])
         revision=globals().get('DEPLOYED_REVISION','local-test')
         write(marker,json.dumps({'version':1,'endpoint':endpoint,'ssh_port':ssh_port,
                                  'source_commit':revision},sort_keys=True)+'\n')

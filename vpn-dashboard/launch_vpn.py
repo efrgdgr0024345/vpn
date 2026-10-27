@@ -32,10 +32,7 @@ def existing_openvpn():
 
 def session_lock():
     directory = Path(tempfile.gettempdir()) / ('vpn-desk-' + str(os.getuid()))
-    try:
-        directory.mkdir(mode=0o700)
-    except FileExistsError:
-        pass
+    directory.mkdir(mode=0o700,exist_ok=True)
     info = directory.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
         raise ValueError('Unsafe lock directory. No connection started.')

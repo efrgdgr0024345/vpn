@@ -37,7 +37,7 @@ def main():
             DESTINATION.parent.mkdir(mode=0o755)
             DESTINATION.parent.chmod(0o755)
         except FileExistsError:
-            pass
+            check_directory(DESTINATION.parent)
         check_directory(DESTINATION.parent)
         # Never merge with, follow, or overwrite a pre-existing installation.
         DESTINATION.mkdir(mode=0o755)
