@@ -1,6 +1,6 @@
 {
   "environment": "vpn-lab",
-  "stage": "owned Kali client controlled acceptance; native mobile apps and client boot guard pending",
+  "stage": "handover fix verified in CI; deployment blocked by SSH authentication; physical connection testing on hold",
   "deployed_source_commit": "b9917442c0d342d7bab2eb01e4d80e6e81ba7e01",
   "os": "Debian 13",
   "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40447778025",
@@ -31,6 +31,7 @@
     "external UDP 1194 reaches the rebooted server"
   ],
   "not_yet_validated": [
+    "corrected handover broker on the live VPS after gated update",
     "physical Kali installation, OpenVPN 2.7, resolver and firewall integration",
     "client physical-interface IPv4/IPv6/DNS leak testing and network/suspend transitions",
     "client early-boot guard: not implemented",
@@ -47,7 +48,8 @@
     "source_commit": "b9917442c0d342d7bab2eb01e4d80e6e81ba7e01",
     "codeql_findings": 0,
     "blocking_findings": 0,
-    "native_repository_security_settings": "Integration cannot enable owner-only alerts/scanning/push-protection settings (GitHub 403); owner verification pending."
+    "native_repository_security_settings": "Integration cannot enable owner-only alerts/scanning/push-protection settings (GitHub 403); owner verification pending.",
+    "dependency_review": "Configured but first PR runs fail because Dependency graph is disabled; owner enablement requested. Dependabot update proposals are working and remain unmerged."
   },
   "client_ci_validated": [
     "authenticated Unix peer checks and root-only fixed stop command",
@@ -64,5 +66,16 @@
     "queries_logged": false,
     "access": "UDP/TCP 53 only from the currently authorized VPN address on the tunnel"
   },
-  "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448467493"
+  "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/40448467493",
+  "pending_update": {
+    "runtime_source_commit": "71586730bc7af1ff4fe39a07abe7540a2b3f94c0",
+    "controller_source_commit": "4435a0e569e3224e2d113d6d205387528dbb46da",
+    "runtime_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40450316357",
+    "runtime_security": "https://github.com/efrgdgr0024345/vpn/actions/runs/40450316409",
+    "codeql_findings": 0,
+    "gated_installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40450316823",
+    "access_diagnosis": "https://github.com/efrgdgr0024345/vpn/actions/runs/40450643823",
+    "status": "SSH authentication rejected; owner-console renewal of the existing expiring grant requested. Updated runtime not claimed deployed.",
+    "fix": "Tolerate only the exact already-gone client-kill response without changing admission/ownership; force the real stale-event ordering and verify original broker survives."
+  }
 }

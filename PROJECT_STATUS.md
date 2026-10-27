@@ -59,9 +59,23 @@ remain fatal; owner/reservation release still requires a matching disconnect.
 A regression verifies this boundary, and the packet test now forces the ordering
 and checks that the original broker survives without a service restart. The test
 also waits for the previous retired peer before starting another handshake,
-so it does not abandon a half-open replay in the global slot. The new source is
-under validation; the deployed source and completed evidence remain recorded
-below and in deployments/vpn-lab.json until a gated update succeeds.
+so it does not abandon a half-open replay in the global slot. The corrected runtime `71586730bc7af1ff4fe39a07abe7540a2b3f94c0` passed
+[branch CI](https://github.com/efrgdgr0024345/vpn/actions/runs/40450023523),
+[main CI](https://github.com/efrgdgr0024345/vpn/actions/runs/40450316357) and
+[zero-finding main CodeQL](https://github.com/efrgdgr0024345/vpn/actions/runs/40450316409).
+The deliberate failure reproduced against the old broker and passed against
+the fix locally as well. A follow-up controller change adds a fixed, redacted
+SSH authentication diagnosis and another regression test (173 total unit tests).
+
+[Gated deployment 40450316823](https://github.com/efrgdgr0024345/vpn/actions/runs/40450316823)
+passed host identity and matching-commit checks, then failed during SSH access.
+[Read-only diagnostic 40450643823](https://github.com/efrgdgr0024345/vpn/actions/runs/40450643823)
+confirmed authentication rejection. The expiring administration grant may need
+renewal; the owner has been given a hash-verified command to renew the existing
+key from the provider root console without replacing the GitHub secret. The
+fix is not claimed deployed. Local VPN connection testing is on hold until the
+updated runtime passes live acceptance. The last verified deployed source and
+completed evidence remain below and in deployments/vpn-lab.json.
 
 ## Current owned-client and private-DNS acceptance (27 October 2026)
 

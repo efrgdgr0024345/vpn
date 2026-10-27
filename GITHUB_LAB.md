@@ -59,6 +59,30 @@ changing the GitHub secret. Expiration prevents new SSH logins; it does not
 terminate an established connection. Administrative jobs have short timeouts
 and do not create persistent sessions.
 
+## Renew the existing grant from the provider root console
+
+An SSH authentication rejection cannot be repaired over that rejected SSH
+connection. Keep the existing private key and GitHub environment secret. The
+following command requires that existing key, verifies the immutable reviewed
+bootstrap source before execution, and renews the same grant for 24 hours.
+It does not change VPN/firewall settings. The bootstrap's generic first-install
+copy hint can be ignored for renewal; do not copy key contents to chat.
+
+```sh
+python3 -I -B - <<'PY'
+import hashlib
+from pathlib import Path
+from urllib.request import urlopen
+if not Path('/root/.vpn-lab-actions/id_ed25519').is_file():
+    raise SystemExit('Existing key missing; stop here.')
+url = 'https://raw.githubusercontent.com/efrgdgr0024345/vpn/71586730bc7af1ff4fe39a07abe7540a2b3f94c0/ops/bootstrap_runner_key.py'
+source = urlopen(url, timeout=20).read(65537)
+if hashlib.sha256(source).hexdigest() != '331590e03c9c741d9c36c89b9bae3f7e28ae4878f403034e4cba896ee157ec6a':
+    raise SystemExit('Checksum mismatch; nothing executed.')
+exec(compile(source, 'verified-key-bootstrap', 'exec'), {'__name__': '__main__'})
+PY
+```
+
 ## Run and inspect
 
 Use **Actions → Lab server administration → Run workflow**, choosing `main`.
