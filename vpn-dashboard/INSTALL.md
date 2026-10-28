@@ -39,10 +39,27 @@ Import your privately downloaded self-contained profile; the default path is
 copies it into root-owned `/etc/vpn-desk/client.ovpn` with mode 0600. It is never
 symlinked to a home profile. Keys, tokens and passwords are not printed.
 
-Enter the literal server address/port and exact TLS certificate name from the
-verified profile; the lab uses `VPNLabServer`. Supply the actual Wi-Fi interface
-and DHCP server. These are machine-local policy, not Git settings. Changes of
-Wi-Fi/DHCP require policy review.
+The installer automatically uses that default profile if present. It validates
+the profile before using its literal endpoint, port, protocol and exact pinned
+TLS certificate name (the lab uses `VPNLabServer`). These known fields are not
+questions. The profile must already come from a trusted, verified source;
+reading its certificate-name pin does not independently authenticate its origin.
+
+Local, read-only diagnostics find the physical Wi-Fi interface on the kernel's
+route to that endpoint, then read its current DHCP server identifier using
+NetworkManager's `nmcli`, if available. No plugin or NetworkManager installation
+is needed. There is no external discovery service or connectivity request.
+Gateway/DNS addresses are never substituted for a missing DHCP identifier.
+Missing, ambiguous, unavailable or timed-out detection asks only for the unknown
+local field. It does not reuse the last Wi-Fi address from chat or the repository.
+
+With successful detection, setup shows the validated public settings and asks
+for one final installation confirmation (in addition to sudo and any optional
+package installation). No keys or passwords are shown. For another profile path
+or explicit local network review, use `bash install.sh --manual`. Endpoint and
+TLS values still come from the validated profile. Existing protected settings
+are preserved on rerun. Changes of Wi-Fi/DHCP require policy review; discovery
+does not silently replace an existing policy.
 
 The installer creates a dedicated nonlogin `vpn-desk` identity, protected helper
 and app files, a menu entry and a public-code hash manifest. It snapshots reviewed

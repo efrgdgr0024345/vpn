@@ -44,6 +44,22 @@ The desktop firewall candidate is not a VPS firewall migration.
 
 ## Kali installation acceptance finding
 
+The owner resumed installation after rebooting Kali. The protected helper was
+still absent. Source permission preparation let the exact `04639eb` installer
+reach configuration, but typing `y` at its certificate-name prompt caused the
+profile/policy identity check to refuse installation before publishing files.
+The owner requested removal of repetitive questions and automatic discovery.
+
+The updated installer uses the existing default private profile, derives its
+endpoint/protocol/port/TLS identity only after strict validation, and attempts
+read-only local Wi-Fi route and DHCP lease discovery. Successful discovery needs
+only a public settings summary and final confirmation; unknown local values
+alone prompt for input. Missing NetworkManager is a supported fallback, and no
+plugin, external lookup or network migration is added. Root imports still use
+the verified private source snapshot, including the bounded diagnostic helper.
+Existing protected configuration remains immutable. Client physical detection
+and first connection acceptance remain pending; the VPS runtime is unchanged.
+
 The owner's extracted `04639eb` release stopped with `Unexpected installation
 bundle member` before installing its helper. The same GitHub ZIP was fetched
 and its installer/helper/security bytes checked against that exact Git commit.

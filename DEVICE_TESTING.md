@@ -59,6 +59,11 @@ do not reopen it merely to install a new public-source application version.
 Install the exact reviewed source following `vpn-dashboard/INSTALL.md`, as the
 ordinary desktop user. The wizard imports the protected profile; installation
 itself changes no networking. Record the installed version/source commit.
+Current setup reads the default profile and attempts local Wi-Fi/DHCP detection,
+then shows one confirmation summary. Verify it against the actual current
+network; the DHCP server can differ from the gateway. Missing detection asks
+only for the unknown value. `bash install.sh --manual` permits explicit source
+path and local network review. Existing protected configuration is not replaced.
 Start the owned app from its menu entry and retain access to the local terminal
 for recovery. There is no NetworkManager VPN plugin or external VPN frontend.
 

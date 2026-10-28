@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 126 desktop and 52 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 138 desktop and 52 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
@@ -39,6 +39,13 @@ protected helper/profile installation and same-version rerun. It also checks
 that source preflight installs nothing and that installation leaves the resolver
 and routes unchanged. Test profile data is inert; no VPN connection is made by
 this installer job. Nonroot elevation arguments are checked separately in units.
+The installer fixture also verifies that known profile fields are not prompted
+again and declining final confirmation leaves application files absent.
+Detection regressions cover one-summary setup, both nmcli output formats,
+missing/ambiguous routes and leases, bounded command failures, manual review,
+invalid inputs before command execution, and summary redaction. The container
+has no physical Wi-Fi or NetworkManager, so its two local network fields use
+the explicit fallback; actual Kali detection still needs physical acceptance.
 
 ## GitHub security review
 

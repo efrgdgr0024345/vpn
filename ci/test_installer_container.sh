@@ -14,9 +14,10 @@ docker exec "$container" mkdir /test
 docker cp vpn-dashboard "$container:/test/vpn-dashboard"
 docker cp ci/installer_smoke.py "$container:/test/installer_smoke.py"
 docker exec "$container" chown -R 0:0 /test
-if [ "$#" -eq 1 ]; then
+if [ "$#" -ge 1 ]; then
   docker cp "$1" "$container:/test/legacy.zip"
-  docker exec -e VPN_LAB_DISPOSABLE_INSTALLER_TEST=1 "$container" /usr/bin/python3 -I -B /test/installer_smoke.py /test/legacy.zip
+  shift
+  docker exec -e VPN_LAB_DISPOSABLE_INSTALLER_TEST=1 "$container" /usr/bin/python3 -I -B /test/installer_smoke.py /test/legacy.zip "$@"
 else
   docker exec -e VPN_LAB_DISPOSABLE_INSTALLER_TEST=1 "$container" /usr/bin/python3 -I -B /test/installer_smoke.py
 fi

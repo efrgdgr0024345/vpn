@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 import fcntl
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -235,7 +236,8 @@ def staged_modules(contents):
             sys.path.insert(0, str(stage))
             import security
             import firewall_policy
-            if Path(security.__file__).parent != stage or Path(firewall_policy.__file__).parent != stage:
+            import safe_io
+            if any(Path(module.__file__).parent != stage for module in (security, firewall_policy, safe_io)):
                 raise InstallationError('Unexpected installer module binding.')
             yield security, firewall_policy
         finally:
@@ -280,35 +282,111 @@ def profile_defaults(text):
             'server_name': identity[0] if identity else None}
 
 
-def collect_configuration(security, invoking_uid):
+def network_read(argv):
+    """Bounded, read-only local diagnostics; never print raw command output."""
+    from safe_io import bounded_run
+    try:
+        result = bounded_run(argv, timeout=5, limit=65536, env=ENVIRONMENT)
+        return result.stdout if result.returncode == 0 else ''
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return ''
+
+
+def valid_interface(value):
+    return (isinstance(value, str)
+            and re.fullmatch(r'[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,14}', value) is not None
+            and value not in ('lo', 'tun0'))
+
+
+def wifi_interface_for(server):
+    """Use the kernel's selected route, never the first device in a list."""
+    try:
+        routes = json.loads(network_read(['/usr/sbin/ip', '-j', '-4', 'route', 'get', server]))
+    except ValueError:
+        return None
+    if not isinstance(routes, list) or len(routes) != 1 or not isinstance(routes[0], dict):
+        return None
+    route = routes[0]
+    interface = route.get('dev')
+    if not valid_interface(interface) or route.get('multipath') or route.get('nexthops'):
+        return None
+    device = Path('/sys/class/net') / interface
+    if not (device.joinpath('wireless').is_dir() or device.joinpath('phy80211').is_dir()):
+        return None
+    return interface
+
+
+def dhcp_server_for(interface):
+    """Only an explicit DHCP server identifier is a usable lease suggestion."""
+    if not valid_interface(interface):
+        return None
+    output = network_read(['/usr/bin/nmcli', '-g', 'DHCP4.OPTION', 'device', 'show', interface])
+    # nmcli versions emit individual lines or a pipe-separated options line.
+    values = re.findall(r'(?:^|\n|[ \t]+\|[ \t]+)dhcp_server_identifier[ \t]*=[ \t]*([^\s|]+)', output)
+    if not values or len(set(values)) != 1:
+        return None
+    try:
+        address = ipaddress.IPv4Address(values[0])
+    except ValueError:
+        return None
+    if address.is_unspecified or address.is_loopback or address.is_multicast or int(address) == 0xffffffff:
+        return None
+    return str(address)
+
+
+def show_configuration(policy):
+    # Only validated, public policy fields are displayed, never profile contents.
+    print('\nInstallation settings:')
+    print('  Wi-Fi interface: ' + policy['wifi_interface'])
+    print('  VPN endpoint: ' + policy['vpn_server_ipv4'] + ':' + str(policy['vpn_port'])
+          + ' (' + policy['vpn_protocol'] + ')')
+    print('  Wi-Fi DHCP server: ' + policy['dhcp_server_ipv4'])
+    print('  Expected TLS certificate name: ' + policy['server_name'])
+    print('  Installation leaves routes, DNS and firewall unchanged.\n')
+
+
+def collect_configuration(security, invoking_uid, *, manual=False):
     policy_path, profile_path = CONFIG_DIR / 'policy.json', CONFIG_DIR / 'client.ovpn'
     if policy_path.exists() or profile_path.exists():
         policy = security.validate_policy(json.loads(existing_bytes(policy_path, True)))
         text = existing_bytes(profile_path, True).decode('utf-8')
         security.validate_profile(text, policy)
         print('Reusing the existing protected configuration; it will not be overwritten.')
+        show_configuration(policy)
         return policy, text
     try:
         home = Path(pwd.getpwuid(invoking_uid).pw_dir)
     except KeyError:
         home = Path('/')
     print('Import a supported self-contained .ovpn profile. Its contents/keys will not be printed.')
-    value = ask('Profile file path', str(home / 'vpn-lab/client.ovpn'))
-    source = Path(value)
+    source = home / 'vpn-lab/client.ovpn'
+    if manual or not source.exists():
+        source = Path(ask('Profile file path', str(source)))
     if not source.is_absolute():
         raise InstallationError('Use an absolute profile path.')
     text = read_profile_source(source, invoking_uid)
     defaults = profile_defaults(text)
-    policy = {
-        'wifi_interface': ask('Wi-Fi interface', 'wlan0'),
-        'vpn_server_ipv4': ask('VPN server IPv4', defaults['vpn_server_ipv4']),
-        'vpn_port': int(ask('VPN port', defaults['vpn_port'])),
-        'vpn_protocol': ask('VPN protocol (udp or tcp-client)', defaults['vpn_protocol']),
-        'dhcp_server_ipv4': ask('Current Wi-Fi DHCP server IPv4'),
-        'server_name': ask('Expected TLS certificate name (verify through your VPN provider)', defaults['server_name']),
-    }
+    # Validate the complete profile before using any of its fields in commands
+    # or output. Temporary network fields are replaced with actual local values.
+    policy = security.validate_policy({**defaults, 'vpn_port': int(defaults['vpn_port']),
+                                      'wifi_interface': 'wlan0', 'dhcp_server_ipv4': '192.0.2.1'})
+    security.validate_profile(text, policy)
+    interface = wifi_interface_for(policy['vpn_server_ipv4'])
+    if manual or interface is None:
+        if interface is None:
+            print('Could not determine one Wi-Fi interface from the route to the VPN.')
+        interface = ask('Wi-Fi interface', interface)
+    if not valid_interface(interface):
+        raise InstallationError('Invalid Wi-Fi interface.')
+    dhcp = dhcp_server_for(interface)
+    if manual or dhcp is None:
+        if dhcp is None:
+            print('No unambiguous DHCP server identifier is available from the current Wi-Fi lease.')
+        dhcp = ask('Current Wi-Fi DHCP server IPv4', dhcp)
+    policy.update(wifi_interface=interface, dhcp_server_ipv4=dhcp)
     policy = security.validate_policy(policy)
     security.validate_profile(text, policy)
+    show_configuration(policy)
     return policy, text
 
 
@@ -376,6 +454,7 @@ def install(security, firewall_policy, contents, policy, profile):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--check', action='store_true', help='Check source files and dependencies; make no changes.')
+    parser.add_argument('--manual', action='store_true', help='Review profile path and local network values interactively.')
     parser.add_argument('--root', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if sys.version_info < (3, 10) or sys.platform != 'linux':
@@ -394,8 +473,10 @@ def main(argv=None):
         snapshot_bundle(os.getuid())
         print('VPN Desk will request sudo to install protected files, a dedicated account and local configuration.', flush=True)
         print('No application firewall/DNS migration or sudoers rule will be applied.', flush=True)
-        return subprocess.run(['/usr/bin/sudo', '--', '/usr/bin/python3', '-I', '-B',
-                               str(SOURCE / 'install.py'), '--root'], check=False).returncode
+        arguments = ['/usr/bin/sudo', '--', '/usr/bin/python3', '-I', '-B', str(SOURCE / 'install.py'), '--root']
+        if args.manual:
+            arguments.append('--manual')
+        return subprocess.run(arguments, check=False).returncode
     if not sys.flags.isolated:
         raise InstallationError('Use bash install.sh or /usr/bin/python3 -I -B install.py.')
     if not sys.stdin.isatty():
@@ -406,7 +487,7 @@ def main(argv=None):
     print('VPN Desk installation: existing differing files are preserved; firewall changes are separate.')
     ensure_dependencies()
     with staged_modules(contents) as (security, firewall_policy):
-        policy, profile = collect_configuration(security, invoking_uid)
+        policy, profile = collect_configuration(security, invoking_uid, manual=args.manual)
         if not confirm('Install the validated configuration, protected app/helpers, launcher and dedicated account?', default=True):
             print('Application installation cancelled.')
             return 1

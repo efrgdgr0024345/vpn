@@ -54,8 +54,12 @@ def main():
             raise RuntimeError('Unexpected source fixture name.')
     PHASE = 'source archive preparation'
     archive_bytes = io.BytesIO()
-    legacy = len(sys.argv)==2
-    if legacy:
+    from_archive = len(sys.argv) in (2, 3)
+    updated_installer = len(sys.argv)==3 and sys.argv[2]=='--updated-installer'
+    if len(sys.argv)>3 or (len(sys.argv)==3 and not updated_installer):
+        raise RuntimeError('Unsupported source fixture arguments.')
+    legacy = from_archive and not updated_installer
+    if from_archive:
         archive = zipfile.ZipFile(sys.argv[1])
         try:
             contents = {}
@@ -68,6 +72,8 @@ def main():
                 contents[name] = archive.read(entries[0])
         finally:
             archive.close()
+        if updated_installer:
+            contents['install.py'] = (ROOT/'vpn-dashboard/install.py').read_bytes()
     else:
         contents = {name:(ROOT/'vpn-dashboard'/name).read_bytes() for name in required}
     with zipfile.ZipFile(archive_bytes, 'w') as archive:
@@ -118,10 +124,25 @@ def main():
     os.chown(profile,1000,1000)
     resolver = Path('/etc/resolv.conf').read_bytes()
     routes = subprocess.check_output(['/usr/sbin/ip','-j','route'])
+    if not legacy:
+        PHASE = 'declining the final confirmation'
+        result, output = run_installer(source, b'wlan0\n192.0.2.1\nn\n')
+        if (result!=1 or 'Application installation cancelled.' not in output
+                or Path('/usr/local/libexec/vpn-desk/privileged.py').exists()
+                or Path('/etc/vpn-desk').exists()):
+            raise RuntimeError('Declining confirmation did not leave application files untouched.')
     PHASE = 'interactive root installation'
-    result, output = run_installer(source, b'\n\n\n\n\n192.0.2.1\n\n\n')
+    # No physical Wi-Fi or NetworkManager exists in this unprivileged container.
+    # Current installers reuse the default profile, then ask only for the two
+    # unavailable network fields and the final confirmation.
+    answers = b'\n\n\n\n\n192.0.2.1\n\n\n' if legacy else b'wlan0\n192.0.2.1\ny\n'
+    result, output = run_installer(source, answers)
     if result!=0 or 'Installed. Open VPN Desk' not in output:
         raise RuntimeError('The real guided installer did not complete.')
+    if not legacy:
+        if ('Installation settings:' not in output or 'Profile file path [' in output
+                or 'VPN server IPv4 [' in output or 'Expected TLS certificate name (' in output):
+            raise RuntimeError('Known profile fields were unnecessarily requested.')
     PHASE = 'installed ownership and configuration'
     helper = Path('/usr/local/libexec/vpn-desk/privileged.py')
     if helper.read_bytes()!=contents['privileged.py'] or helper.stat().st_uid!=0 or helper.stat().st_mode&0o022:

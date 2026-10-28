@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -199,6 +200,152 @@ class WizardTests(unittest.TestCase):
             self.assertEqual((wizard.MENU_DIR / 'vpn-desk.desktop').read_bytes(), wizard.DESKTOP)
             self.assertTrue((wizard.CONFIG_DIR / 'vpn-guard.candidate.json').is_file())
             run.assert_not_called()
+
+
+class DetectionTests(unittest.TestCase):
+    @contextmanager
+    def fresh_profile(self, text=PROFILE):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home = root / 'home'
+            source = home / 'vpn-lab/client.ovpn'
+            source.parent.mkdir(parents=True)
+            source.write_text(text)
+            source.chmod(0o600)
+            with patch.object(wizard, 'CONFIG_DIR', root / 'config'), \
+                    patch.object(wizard.pwd, 'getpwuid', return_value=SimpleNamespace(pw_dir=str(home))):
+                yield source
+
+    def test_detected_configuration_needs_no_field_answers_and_prints_only_summary(self):
+        with self.fresh_profile(), patch.object(wizard, 'wifi_interface_for', return_value='wlp2s0'), \
+                patch.object(wizard, 'dhcp_server_for', return_value='192.0.2.1') as dhcp, \
+                patch.object(wizard, 'ask') as ask, patch('sys.stdout', new_callable=io.StringIO) as output:
+            policy, text = wizard.collect_configuration(security, os.getuid())
+            self.assertEqual(policy, {**POLICY, 'wifi_interface': 'wlp2s0'})
+            self.assertEqual(text, PROFILE)
+            ask.assert_not_called()
+            dhcp.assert_called_once_with('wlp2s0')
+            self.assertIn('192.0.2.10:1194 (udp)', output.getvalue())
+            self.assertIn('vpn.example.invalid', output.getvalue())
+            self.assertNotIn('TEST KEY', output.getvalue())
+            self.assertNotIn('TEST CONTROL KEY', output.getvalue())
+
+    def test_only_missing_dhcp_is_requested(self):
+        with self.fresh_profile(), patch.object(wizard, 'wifi_interface_for', return_value='wlan0'), \
+                patch.object(wizard, 'dhcp_server_for', return_value=None), \
+                patch.object(wizard, 'ask', return_value='192.0.2.1') as ask, \
+                patch('sys.stdout', new_callable=io.StringIO):
+            policy, _ = wizard.collect_configuration(security, os.getuid())
+            self.assertEqual(policy, POLICY)
+            ask.assert_called_once_with('Current Wi-Fi DHCP server IPv4', None)
+
+    def test_missing_interface_is_requested_before_its_lease(self):
+        with self.fresh_profile(), patch.object(wizard, 'wifi_interface_for', return_value=None), \
+                patch.object(wizard, 'dhcp_server_for', return_value='192.0.2.1') as dhcp, \
+                patch.object(wizard, 'ask', return_value='wlan0') as ask, \
+                patch('sys.stdout', new_callable=io.StringIO):
+            self.assertEqual(wizard.collect_configuration(security, os.getuid())[0], POLICY)
+            ask.assert_called_once_with('Wi-Fi interface', None)
+            dhcp.assert_called_once_with('wlan0')
+
+    def test_manual_mode_can_review_source_and_local_values(self):
+        with self.fresh_profile() as source, \
+                patch.object(wizard, 'wifi_interface_for', return_value='wlan0'), \
+                patch.object(wizard, 'dhcp_server_for', return_value='192.0.2.1') as dhcp, \
+                patch.object(wizard, 'ask', side_effect=[str(source), 'wlp3s0', '198.51.100.1']) as ask, \
+                patch('sys.stdout', new_callable=io.StringIO):
+            policy, _ = wizard.collect_configuration(security, os.getuid(), manual=True)
+            self.assertEqual(policy['wifi_interface'], 'wlp3s0')
+            self.assertEqual(policy['dhcp_server_ipv4'], '198.51.100.1')
+            self.assertEqual(ask.call_count, 3)
+            dhcp.assert_called_once_with('wlp3s0')
+
+    def test_missing_profile_only_requests_its_path(self):
+        with self.fresh_profile() as source:
+            alternate = source.with_name('alternate.ovpn')
+            source.rename(alternate)
+            with patch.object(wizard, 'wifi_interface_for', return_value='wlan0'), \
+                    patch.object(wizard, 'dhcp_server_for', return_value='192.0.2.1'), \
+                    patch.object(wizard, 'ask', return_value=str(alternate)) as ask, \
+                    patch('sys.stdout', new_callable=io.StringIO):
+                self.assertEqual(wizard.collect_configuration(security, os.getuid())[0], POLICY)
+                ask.assert_called_once_with('Profile file path', str(source))
+
+    def test_profile_is_validated_before_commands_or_display(self):
+        variants = (PROFILE.replace('192.0.2.10', 'untrusted.example'),
+                    PROFILE.replace('vpn.example.invalid', 'bad\x1b[31m'),
+                    PROFILE + 'up /tmp/untrusted\n',
+                    PROFILE.replace('verify-x509-name vpn.example.invalid name\n', ''),
+                    PROFILE + 'remote 198.51.100.10 1194\n')
+        for text in variants:
+            with self.subTest(text_index=variants.index(text)), self.fresh_profile(text), \
+                    patch.object(wizard, 'network_read') as read, \
+                    patch('sys.stdout', new_callable=io.StringIO) as output:
+                with self.assertRaises((security.Refused, ValueError)):
+                    wizard.collect_configuration(security, os.getuid())
+                read.assert_not_called()
+                self.assertNotIn('Installation settings:', output.getvalue())
+                self.assertNotIn('\x1b', output.getvalue())
+
+    def test_invalid_manual_interface_cannot_reach_nmcli(self):
+        with self.fresh_profile(), patch.object(wizard, 'wifi_interface_for', return_value=None), \
+                patch.object(wizard, 'ask', return_value='--malicious'), \
+                patch.object(wizard, 'dhcp_server_for') as dhcp, \
+                patch('sys.stdout', new_callable=io.StringIO):
+            with self.assertRaises(wizard.InstallationError):
+                wizard.collect_configuration(security, os.getuid())
+            dhcp.assert_not_called()
+
+    def test_route_lookup_uses_endpoint_and_requires_one_physical_wifi(self):
+        with patch.object(wizard, 'network_read', return_value='[{"dev":"wlp2s0"}]') as read, \
+                patch.object(Path, 'is_dir', return_value=True):
+            self.assertEqual(wizard.wifi_interface_for('192.0.2.10'), 'wlp2s0')
+            read.assert_called_once_with(['/usr/sbin/ip', '-j', '-4', 'route', 'get', '192.0.2.10'])
+        with patch.object(wizard, 'network_read', return_value='[{"dev":"eth0"}]'), \
+                patch.object(Path, 'is_dir', return_value=False):
+            self.assertIsNone(wizard.wifi_interface_for('192.0.2.10'))
+        for value in ('invalid', '{}', '[]', '[null]', '[{"dev":"lo"}]',
+                      '[{"dev":"tun0"}]', '[{"dev":"../bad"}]',
+                      '[{"dev":"wlan0"},{"dev":"wlan1"}]',
+                      '[{"dev":"wlan0","multipath":[{}]}]'):
+            with self.subTest(value=value), patch.object(wizard, 'network_read', return_value=value):
+                self.assertIsNone(wizard.wifi_interface_for('192.0.2.10'))
+
+    def test_nmcli_formats_and_exact_interface_are_supported(self):
+        for output in ('dhcp_server_identifier = 192.0.2.1\nrouters = 198.51.100.1\n',
+                       'routers = 198.51.100.1 | dhcp_server_identifier = 192.0.2.1 | expiry = 42\n'):
+            with patch.object(wizard, 'network_read', return_value=output) as read:
+                self.assertEqual(wizard.dhcp_server_for('wlp2s0'), '192.0.2.1')
+                read.assert_called_once_with(['/usr/bin/nmcli', '-g', 'DHCP4.OPTION', 'device', 'show', 'wlp2s0'])
+
+    def test_dhcp_never_guesses_from_gateway_dns_or_conflicting_identifiers(self):
+        for output in ('routers = 192.0.2.1\ndomain_name_servers = 192.0.2.1\n',
+                       'dhcp_server_identifier = 192.0.2.1\ndhcp_server_identifier = 192.0.2.2',
+                       'dhcp_server_identifier = not-an-ip', 'dhcp_server_identifier = 127.0.0.1',
+                       'dhcp_server_identifier = 0.0.0.0', 'dhcp_server_identifier = 224.0.0.1',
+                       'dhcp_server_identifier = 255.255.255.255', 'dhcp_server_identifier = 2001:db8::1'):
+            with self.subTest(output=output), patch.object(wizard, 'network_read', return_value=output):
+                self.assertIsNone(wizard.dhcp_server_for('wlan0'))
+        with patch.object(wizard, 'network_read') as read:
+            self.assertIsNone(wizard.dhcp_server_for('--bad'))
+            read.assert_not_called()
+
+    def test_missing_timed_out_and_oversized_diagnostics_fall_back_without_raw_output(self):
+        from safe_io import OutputLimitExceeded
+        for error in (FileNotFoundError('fixture'), subprocess.TimeoutExpired(['fixture'], 5),
+                      OutputLimitExceeded('private fixture')):
+            with patch('safe_io.bounded_run', side_effect=error), \
+                    patch('sys.stdout', new_callable=io.StringIO) as output:
+                self.assertEqual(wizard.network_read(['/usr/bin/nmcli']), '')
+                self.assertEqual(output.getvalue(), '')
+
+    def test_manual_mode_survives_sudo_with_literal_arguments(self):
+        with patch.object(wizard.os, 'geteuid', return_value=1000), \
+                patch.object(wizard.sys.stdin, 'isatty', return_value=True), \
+                patch.object(wizard.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as run, \
+                patch('sys.stdout', new_callable=io.StringIO):
+            self.assertEqual(wizard.main(['--manual']), 0)
+            self.assertEqual(run.call_args.args[0][-2:], ['--root', '--manual'])
 
 
 class BundleTests(unittest.TestCase):
