@@ -284,9 +284,9 @@ def profile_defaults(text):
 
 def network_read(argv):
     """Bounded, read-only local diagnostics; never print raw command output."""
-    from safe_io import bounded_run
+    import safe_io
     try:
-        result = bounded_run(argv, timeout=5, limit=65536, env=ENVIRONMENT)
+        result = safe_io.bounded_run(argv, timeout=5, limit=65536, env=ENVIRONMENT)
         return result.stdout if result.returncode == 0 else ''
     except (OSError, ValueError, subprocess.SubprocessError):
         return ''
