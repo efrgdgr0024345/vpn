@@ -1,5 +1,6 @@
 """Run the actual guided root installer only in a disposable test container."""
 import io
+import hashlib
 import os
 from pathlib import Path
 import pty
@@ -157,11 +158,28 @@ def main():
     result, output = run_installer(source,b'\n')
     if result!=0 or 'Reusing the existing protected configuration' not in output:
         raise RuntimeError('The installed configuration could not be reused.')
+    PHASE = 'reviewed transport upgrade'
+    candidate = ROOT/'vpn-dashboard/vpn_session_helper.py'
+    private_config = {path: path.read_bytes() for path in Path('/etc/vpn-desk').iterdir()}
+    for _ in range(2):
+        result = subprocess.run(['/usr/bin/python3','-I','-B',str(ROOT/'upgrade_client_transport.py'),
+                        str(candidate),hashlib.sha256(candidate.read_bytes()).hexdigest()],
+                       timeout=15,capture_output=True,text=True)
+        if result.returncode:
+            if result.stdout.startswith('Upgrade stopped: ') and len(result.stdout) < 256:
+                print('::error title=Transport upgrade fixture::'+result.stdout.strip(),flush=True)
+            raise RuntimeError('The reviewed transport upgrade did not complete.')
+    if (Path('/usr/local/libexec/vpn-desk/vpn_session_helper.py').read_bytes()!=candidate.read_bytes()
+            or any(path.read_bytes()!=value for path,value in private_config.items())):
+        raise RuntimeError('The transport upgrade changed private configuration or missed its target.')
+    audit = ('import sys;sys.path.insert(0,"/opt/vpn-desk");import install_audit;'
+             'raise SystemExit(0 if install_audit.check()["state"]=="matches_baseline" else 1)')
+    subprocess.run(['/usr/bin/python3','-I','-B','-c',audit],check=True,timeout=10)
     if (Path('/etc/resolv.conf').read_bytes()!=resolver
             or subprocess.check_output(['/usr/sbin/ip','-j','route'])!=routes
             or Path('/etc/vpn-desk/network-state.json').exists()):
         raise RuntimeError('Installation changed networking before Connect.')
-    print('PASS: extracted ZIP permission refusal, owner-only preparation, interactive installation, protected helper/profile, same-version rerun and unchanged networking.')
+    print('PASS: ZIP source guards, real installation/rerun, reviewed transport upgrade with matching audit, unchanged private settings and networking.')
 
 
 if __name__=='__main__':

@@ -12,20 +12,26 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'vpn-dashboard'))
 import session_channel as channel
 import install_audit as audit
+import vpn_session_helper as transport
 
 
 def supervisor_with_real_openvpn():
     """Exercise the actual app supervisor against the isolated server.
 
-    The client TUN stays unconfigured. The separate kernel namespace check
-    validates client firewall/DNS ownership; this fixture substitutes that check
-    only to avoid replacing the server container's firewall with a client one.
+    IPv6 automatic address generation is disabled on the pre-created client TUN;
+    the real engine must configure IPv4 and ignore the server's IPv6 pushes.
+    Routes stay unmodified. Host-wide IPv6 disablement needs physical acceptance.
+    The separate namespace check validates client firewall/DNS ownership; this
+    fixture substitutes that check to preserve the server container's firewall.
     """
     command=['/usr/sbin/openvpn','--config','/root/vpn-lab/client.ovpn',
              '--auth-user-pass','/root/vpn-lab/login.txt','--auth-nocache',
-             '--dev','tun-app-test','--dev-type','tun','--ifconfig-noexec','--route-noexec',
+             '--dev','tun-app-test','--dev-type','tun','--route-noexec',
              '--user','vpn-lab-transport','--group','vpn-lab-transport','--script-security','1',
              '--connect-retry','1','--connect-timeout','10','--connect-retry-max','3']
+    command += transport.ipv4_options('udp')
+    subprocess.run(['/usr/sbin/ip','tuntap','add','dev','tun-app-test','mode','tun'],check=True,timeout=5)
+    subprocess.run(['/usr/sbin/ip','link','set','dev','tun-app-test','addrgenmode','none'],check=True,timeout=5)
     program=('import sys;sys.path.insert(0,'+repr(str(ROOT/'vpn-dashboard'))+');'
              'import vpn_session_helper as s;'
              's.network_setup.verify_during_session=lambda:True;'
@@ -47,6 +53,11 @@ def supervisor_with_real_openvpn():
                 time.sleep(.1)
             else:
                 raise RuntimeError('The app supervisor did not report real tunnel initialization.')
+            addresses=json.loads(subprocess.check_output(
+                ['/usr/sbin/ip','-j','address','show','dev','tun-app-test'],text=True,timeout=5))
+            families={item['family'] for link in addresses for item in link.get('addr_info',[])}
+            if 'inet' not in families or 'inet6' in families:
+                raise RuntimeError('The real client did not configure IPv4 while ignoring IPv6 server pushes.')
             channel.request('stop')
             process.wait(timeout=15)
             if process.returncode:
@@ -68,7 +79,8 @@ def supervisor_with_real_openvpn():
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid,signal.SIGKILL)
                     process.wait(timeout=5)
-    print('PASS: actual app supervisor over real TLS/PAM transport, private local status, filtered events and scoped Disconnect.',flush=True)
+            subprocess.run(['/usr/sbin/ip','tuntap','del','dev','tun-app-test','mode','tun'],check=True,timeout=5)
+    print('PASS: app supervisor over real TLS/PAM, IPv4-only tunnel addressing despite IPv6 server pushes, private status and scoped Disconnect.',flush=True)
 
 
 def main():

@@ -8,15 +8,48 @@ import socket
 import stat
 import subprocess
 import sys
+import tempfile
 import time
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ops'))
 import server_foundation as foundation
 import server_selftest
+import device_admin
 sys.path.insert(0,str(ROOT/'ci'))
 import client_control_smoke
 PHASE='preflight'
+
+
+def old_password_rejected(login):
+    with tempfile.TemporaryDirectory(prefix='vpn-old-credential-',dir='/run') as directory:
+        path=Path(directory)/'auth'
+        path.write_bytes(login)
+        path.chmod(0o600)
+        with tempfile.TemporaryFile() as output:
+            process=subprocess.Popen(['/usr/sbin/openvpn','--config','/root/vpn-lab/client.ovpn',
+                '--auth-user-pass',str(path),'--auth-nocache','--dev','tun-old-secret',
+                '--dev-type','tun','--ifconfig-noexec','--route-noexec','--connect-retry','1',
+                '--connect-timeout','5','--connect-retry-max','2','--script-security','1'],
+                stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+            try:
+                end=time.monotonic()+15
+                while time.monotonic()<end:
+                    output.seek(0)
+                    text=output.read(131073).decode(errors='replace')
+                    if len(text)>131072 or 'Initialization Sequence Completed' in text:
+                        raise RuntimeError('Old credential test overflowed or unexpectedly connected.')
+                    if 'AUTH_FAILED' in text:
+                        return
+                    if process.poll() is not None:
+                        break
+                    time.sleep(.1)
+                raise RuntimeError('The previous password was not observed being rejected.')
+            finally:
+                if process.poll() is None:
+                    os.killpg(process.pid,signal.SIGTERM)
+                    process.wait(timeout=5)
 
 
 def main():
@@ -64,6 +97,36 @@ def main():
             print(json.dumps(server_selftest.test(broker.pid),sort_keys=True),flush=True)
             PHASE='owned app supervisor'
             client_control_smoke.supervisor_with_real_openvpn()
+            PHASE='real password recovery'
+            old_login=login.read_bytes()
+            real_run=foundation.run
+            def lifecycle(argv,**kwargs):
+                nonlocal server,broker
+                if argv==['/usr/bin/systemctl','stop','openvpn-server@vpn-lab.service']:
+                    for process in (broker,server):
+                        if process.poll() is None:
+                            try:
+                                os.killpg(process.pid,signal.SIGTERM)
+                            except ProcessLookupError:
+                                pass
+                            process.wait(timeout=10)
+                    return ''
+                if argv==['/usr/bin/systemctl','start','openvpn-server@vpn-lab.service']:
+                    server=subprocess.Popen(['/usr/sbin/openvpn','--config','/etc/openvpn/server/vpn-lab.conf'],
+                        stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+                    broker=subprocess.Popen(['/usr/bin/python3','-I','-B','/test/ops/session_broker.py'],
+                        stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+                    return ''
+                return real_run(argv,**kwargs)
+            # Only systemd lifecycle is substituted in the container. PAM,
+            # chpasswd, private writes, nft revocation and daemon restart are real.
+            with patch.object(foundation,'run',side_effect=lifecycle):
+                recovery=device_admin.administer('rotate-password')
+            if login.read_bytes()==old_login or recovery.get('credential_contents_returned') is not False:
+                raise RuntimeError('Private password recovery did not replace the known credential.')
+            old_password_rejected(old_login)
+            client_control_smoke.supervisor_with_real_openvpn()
+            print('PASS: real PAM password replacement, old-password rejection, fresh-password login and daemon/token reset.',flush=True)
         except Exception:
             print('::notice title=VPN lab daemon state::'+json.dumps({
                 'server_exit':server.poll(),'broker_exit':broker.poll(),

@@ -171,7 +171,7 @@ def private_file(path, contents):
 def execute(operation, environment, run=bounded_run):
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     if operation not in ('connectivity', 'inventory', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download',
-                         'device-status','revoke-device','enable-device','reset-sessions','reboot-lab'):
+                         'device-status','revoke-device','enable-device','reset-sessions','reboot-lab','rotate-password'):
         raise LabError('Unsupported lab operation.')
     host, port, fingerprint = settings(environment)
     known = verified_host(host, port, fingerprint, run)
@@ -185,7 +185,7 @@ def execute(operation, environment, run=bounded_run):
     device=environment.get('VPN_LAB_DEVICE','kali')
     if device not in ('kali','iphone','android'):
         raise LabError('Select a fixed registered device name.')
-    if operation in ('device-status','revoke-device','enable-device','reset-sessions','reboot-lab'):
+    if operation in ('device-status','revoke-device','enable-device','reset-sessions','reboot-lab','rotate-password'):
         program=('DEVICE_OPERATION = '+repr(operation)+'\nDEVICE_NAME = '+repr(device)+'\n'
                  +(ROOT/'ops/device_admin.py').read_text())
     if operation=='probe-udp':
@@ -305,6 +305,8 @@ def execute(operation, environment, run=bounded_run):
             expected={'new_download_access_closed','private_export_copies_removed'}
         elif operation in ('device-status','revoke-device','enable-device','reset-sessions','reboot-lab'):
             expected={'devices','session_reset','reboot_scheduled','credential_contents_returned'}
+        elif operation=='rotate-password':
+            expected={'password_rotated','sessions_invalidated','old_download_closed','credential_contents_returned'}
         if not isinstance(report, dict) or set(report) != expected:
             raise LabError('Inventory returned unexpected fields; raw output withheld.')
         if environment.get('GITHUB_ACTIONS') == 'true':

@@ -85,6 +85,16 @@ PY
 
 ## Run and inspect
 
+The gated `rotate-password` operation is independent root-only recovery for an
+exposed initial VPN password. It preflights the protected original/device copies,
+clears forwarding and stops OpenVPN before changing PAM and all four private
+login files, closes old download access, then starts OpenVPN with a new in-memory
+token signing secret. A partial credential-write failure leaves the VPN stopped
+for provider-console recovery. Its report contains fixed booleans, never a
+password. Use the owner's existing verified SSH public key with `prepare-download`
+to retrieve the replacement login privately, then close that temporary grant.
+This operation does not implement automatic password rotation at every handoff.
+
 Use **Actions → Lab server administration → Run workflow**, choosing `main`.
 Supply the lab IPv4 address, SSH port and full `SHA256:...` ED25519 fingerprint
 obtained through the provider console. Start with `connectivity`, then choose

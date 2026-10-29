@@ -8,11 +8,12 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 docker start "$container" >/dev/null
-docker exec "$container" sh -c 'apt-get update -qq >/tmp/packages.log 2>&1 && apt-get install -y -qq --no-install-recommends python3 python3-tk sudo openvpn iproute2 nftables passwd xterm >>/tmp/packages.log 2>&1 || { tail -30 /tmp/packages.log; exit 1; }'
+docker exec "$container" sh -c 'apt-get update -qq >/tmp/packages.log 2>&1 && apt-get install -y -qq --no-install-recommends python3 python3-tk sudo openvpn iproute2 nftables passwd procps xterm >>/tmp/packages.log 2>&1 || { tail -30 /tmp/packages.log; exit 1; }'
 docker exec "$container" useradd --create-home --user-group --uid 1000 vpn-install-test
 docker exec "$container" mkdir /test
 docker cp vpn-dashboard "$container:/test/vpn-dashboard"
 docker cp ci/installer_smoke.py "$container:/test/installer_smoke.py"
+docker cp ops/upgrade_client_transport.py "$container:/test/upgrade_client_transport.py"
 docker exec "$container" chown -R 0:0 /test
 if [ "$#" -ge 1 ]; then
   docker cp "$1" "$container:/test/legacy.zip"

@@ -30,7 +30,7 @@ The check reads source metadata/syntax and dependencies without making changes.
 Normal installation repeats the source checks before requesting sudo and again
 inside the root process. The installer requests sudo and optionally offers signed
 distribution packages if prerequisites are missing. Runtime tools include Python
-3.10+/Tk, OpenVPN 2.5+, nftables, iproute2, sudo and a terminal. Linux process-
+3.10+/Tk, OpenVPN 2.5+, nftables, iproute2, procps, sudo and a terminal. Linux process-
 descriptor signaling is required. NetworkManager/systemd diagnostic commands are
 optional; missing ones do not prevent the standalone engine from working.
 
@@ -69,6 +69,30 @@ the first-install flow does not overwrite unknown modifications.
 
 Installation itself changes no routes, DNS or firewall. Open **VPN Desk** from
 the applications menu, or run `vpn-desk` as your ordinary user.
+
+## IPv4-only transport update
+
+The transport helper now forces IPv4 UDP/TCP, ignores pushed IPv6 addresses and
+routes, and replaces any combined server redirect with a fixed IPv4 `def1`
+redirect. It keeps certificate verification, password handling and the owned
+guard unchanged. This allows the existing server configuration to coexist with
+an IPv4-only client. It does not itself disable IPv6 across the operating system.
+
+For the installed earlier helper, the explicit
+`ops/upgrade_client_transport.py` accepts an independently hash-verified candidate
+file and its SHA256. Run using system Python with `sudo /usr/bin/python3 -I -B`.
+The reviewed updater requires no active OpenVPN or held action lock, checks the
+protected public-code baseline, refuses unknown changes/shadow modules, replaces
+only the known transport helper and updates its manifest entry. It preserves
+private profiles, passwords, policies, firewall, DNS and recovery state. A known
+interruption between the helper and manifest writes can finish on rerun; unknown
+differences remain a refusal. This is a narrow transport update, not a general
+application upgrade or a way to overwrite an installation-integrity warning.
+
+System-wide IPv6 disablement is a separate, explicit Kali step after the
+compatible helper is installed. Keep normal networking recovery available and
+verify the actual host after applying it; the container tests do not establish
+Kali's boot or NetworkManager behavior.
 
 ## Connect and stop
 

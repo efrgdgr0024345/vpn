@@ -62,6 +62,18 @@ jobs:
           persist-credentials: false
       - name: Exercise extracted source permissions and real protected installation
         run: sh ci/test_installer_container.sh
+      - name: Upgrade the owner's exact earlier release using reviewed current code
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          from urllib.request import urlopen
+          source = urlopen('https://codeload.github.com/efrgdgr0024345/vpn/zip/04639ebf3f3e83801927633ff32982aa70827aff', timeout=30).read(2000001)
+          if hashlib.sha256(source).hexdigest() != '13cea5b979082fc9f815219089ee9c97084ae824f8176d13301164db9674395c':
+              raise SystemExit('Earlier public-source archive checksum mismatch.')
+          Path('/tmp/vpn-installer-04639eb.zip').write_bytes(source)
+          PY
+          sh ci/test_installer_container.sh /tmp/vpn-installer-04639eb.zip --updated-installer
 
   ssh-integration:
     name: Real SSH administration safeguards (Debian 13)

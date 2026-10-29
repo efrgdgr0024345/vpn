@@ -67,6 +67,7 @@ def required_packages():
         'nftables': ('/usr/sbin/nft',),
         'sudo': ('/usr/bin/sudo',),
         'passwd': ('/usr/sbin/useradd',),
+        'procps': ('/usr/bin/ps',),
     }
     missing = [package for package, paths in required.items()
                if not any(os.access(path, os.X_OK) for path in paths)]

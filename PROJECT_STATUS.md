@@ -44,6 +44,27 @@ The desktop firewall candidate is not a VPS firewall migration.
 
 ## Kali installation acceptance finding
 
+On 29 October the owner identified an unpaid provider invoice behind the lab's
+loss of reachability. The first new inventory (`40798935397`) failed before SSH
+authentication. Once billing was addressed, host-key verification passed but
+the expiring administrator grant was rejected (`40801094956`). The owner renewed
+the same key in the independent provider console. Inventory `40801475888` then
+confirmed OpenVPN, broker and Unbound running, UDP 1194 listening and both
+firewall tables present. External UDP probe `40801569163` and live packet/token
+acceptance `40801706013` succeeded. Runtime source remains `8510966`; these
+checks did not install another server foundation or modify host routes/resolver.
+
+The owner's repeated dashboard snapshot predated those recovery checks; it did
+not establish a new IPv6 fault. The owner nevertheless requested IPv6 disabled
+on Kali. The prepared client transport explicitly selects IPv4 and filters
+incompatible IPv6 server pushes while retaining a local IPv4 full-tunnel redirect.
+A narrow, checked updater preserves the protected private configuration and
+updates the public transport baseline. Whole-host IPv6 disablement and physical
+Kali acceptance are still pending. The screenshot exposed the initial password;
+root-only administrative recovery is being added to replace it privately and
+invalidate outstanding sessions. This is not continuous bootstrap-password
+rotation or the still-unimplemented complete rotating-handoff credential lifecycle.
+
 The owner resumed installation after rebooting Kali. The protected helper was
 still absent. Source permission preparation let the exact `04639eb` installer
 reach configuration, but typing `y` at its certificate-name prompt caused the

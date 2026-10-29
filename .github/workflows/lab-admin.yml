@@ -7,7 +7,7 @@ on:
       operation:
         description: Lab operation (install-foundation changes the disposable server)
         type: choice
-        options: [connectivity, inventory, install-foundation, test-foundation, probe-udp, prepare-download, close-download, device-status, revoke-device, enable-device, reset-sessions, reboot-lab]
+        options: [connectivity, inventory, install-foundation, test-foundation, probe-udp, prepare-download, close-download, device-status, revoke-device, enable-device, reset-sessions, rotate-password, reboot-lab]
         default: connectivity
       host:
         description: Disposable lab server IPv4 address (public workflow input)
@@ -57,7 +57,7 @@ jobs:
 
   verified-build:
     needs: connectivity
-    if: inputs.operation == 'install-foundation' || inputs.operation == 'prepare-download' || inputs.operation == 'close-download' || inputs.operation == 'revoke-device' || inputs.operation == 'enable-device' || inputs.operation == 'reset-sessions' || inputs.operation == 'test-foundation' || inputs.operation == 'reboot-lab'
+    if: inputs.operation == 'install-foundation' || inputs.operation == 'prepare-download' || inputs.operation == 'close-download' || inputs.operation == 'revoke-device' || inputs.operation == 'enable-device' || inputs.operation == 'reset-sessions' || inputs.operation == 'rotate-password' || inputs.operation == 'test-foundation' || inputs.operation == 'reboot-lab'
     permissions:
       contents: read
       actions: read

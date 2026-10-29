@@ -14,6 +14,19 @@ import portal_helper
 from security import PROFILE, SERVICE_USER, load_policy, read_trusted, service_account, validate_profile
 
 
+def ipv4_options(protocol):
+    if protocol not in ('udp', 'tcp-client'):
+        raise portal_helper.Refused('Unsupported VPN transport.')
+    return ['--proto', 'udp4' if protocol == 'udp' else 'tcp4-client',
+            # Keep IPv4 routing local and fixed even when an older lab server
+            # pushes a combined IPv4/IPv6 redirect or IPv6 tunnel addresses.
+            '--pull-filter', 'ignore', 'ifconfig-ipv6',
+            '--pull-filter', 'ignore', 'route-ipv6',
+            '--pull-filter', 'ignore', 'redirect-gateway',
+            '--pull-filter', 'ignore', 'block-ipv6',
+            '--redirect-gateway', 'def1']
+
+
 def openvpn_argv():
     policy = load_policy()
     validate_profile(read_trusted(PROFILE, private=True), policy)
@@ -21,10 +34,11 @@ def openvpn_argv():
     executable = next((p for p in ('/usr/sbin/openvpn', '/usr/bin/openvpn') if Path(p).is_file()), None)
     if not executable:
         raise portal_helper.Refused('OpenVPN is not installed.')
-    return [executable, '--config', str(PROFILE), '--auth-user-pass', '--auth-nocache',
+    return ([executable, '--config', str(PROFILE), '--auth-user-pass', '--auth-nocache']
+            + ipv4_options(policy['vpn_protocol']) + [
             '--mssfix', '1300', '--script-security', '1',
             '--allow-compression', 'no', '--user', SERVICE_USER,
-            '--group', SERVICE_USER, '--persist-key', '--persist-tun']
+            '--group', SERVICE_USER, '--persist-key', '--persist-tun'])
 
 
 def prepare_session():

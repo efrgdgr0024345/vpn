@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 138 desktop and 52 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 139 desktop and 62 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
@@ -24,7 +24,10 @@ disconnect-before-transfer. A delayed-broker replay forces disconnect-before-kil
 ordering and checks that the original broker survives; other management errors
 remain fatal. The app supervisor is also exercised with the real
 engine and authenticated local IPC. Its network monitor is substituted there;
-the separate network-namespace test covers the actual client guard. Synthetic DNS
+the separate network-namespace test covers the actual client guard. Its real
+OpenVPN client now configures IPv4 on a TUN with IPv6 address generation disabled
+and ignores the unchanged server's IPv6 pushes. This verifies protocol handling;
+host-wide kernel/sysctl disablement still needs physical acceptance. Synthetic DNS
 is confined to that isolated harness; production uses the VPS's recursive resolver.
 
 Only explicit TUN/NET_ADMIN access is granted to the VPN containers. They publish
@@ -46,6 +49,18 @@ missing/ambiguous routes and leases, bounded command failures, manual review,
 invalid inputs before command execution, and summary redaction. The container
 has no physical Wi-Fi or NetworkManager, so its two local network fields use
 the explicit fallback; actual Kali detection still needs physical acceptance.
+The installer job also verifies the hash-pinned original `04639eb` source ZIP,
+performs its real installation with the updated wizard, and exercises the narrow
+transport upgrade twice. Installed code must match the updated audit baseline;
+private configuration and networking must remain unchanged. Upgrade units cover
+unknown modifications, shadow modules, source links/permissions, process/lock
+refusals, bad candidate hashes, private-path rejection and known interrupted-pair
+recovery. Root-only password recovery units verify deny-before-change ordering,
+private-copy synchronization, secret-free reporting and fail-closed write errors.
+The real VPN container also replaces the PAM password and private copies,
+restarts OpenVPN/broker, rejects the previous password over TLS and connects
+with the replacement. Only systemd's stop/start commands are substituted with
+the container-owned processes; PAM, chpasswd, nft and credential writes are real.
 
 ## GitHub security review
 

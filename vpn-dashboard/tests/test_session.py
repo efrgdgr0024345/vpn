@@ -30,20 +30,31 @@ class SessionTests(unittest.TestCase):
 
     def test_only_protected_profile_reaches_openvpn(self):
         account = SimpleNamespace(pw_uid=995, pw_gid=995)
-        with patch.object(session, 'load_policy', return_value={'test': 'policy'}), \
+        with patch.object(session, 'load_policy', return_value={'vpn_protocol': 'udp'}), \
                 patch.object(session, 'read_trusted', return_value='profile') as read, \
                 patch.object(session, 'validate_profile') as validate, \
                 patch.object(session, 'service_account', return_value=account), \
                 patch.object(session.Path, 'is_file', return_value=True):
             command = session.openvpn_argv()
         read.assert_called_once_with(PROFILE, private=True)
-        validate.assert_called_once_with('profile', {'test': 'policy'})
+        validate.assert_called_once_with('profile', {'vpn_protocol': 'udp'})
         self.assertEqual(command[:3], ['/usr/sbin/openvpn', '--config', '/etc/vpn-desk/client.ovpn'])
         self.assertEqual(command[command.index('--user') + 1], 'vpn-desk')
         self.assertEqual(command[command.index('--group') + 1], 'vpn-desk')
         self.assertEqual(command[command.index('--script-security') + 1], '1')
         self.assertIn('--auth-nocache', command)
         self.assertEqual(command[command.index('--allow-compression') + 1], 'no')
+
+    def test_ipv4_transport_replaces_combined_gateway_push_and_filters_ipv6_configuration(self):
+        for protocol, transport in (('udp', 'udp4'), ('tcp-client', 'tcp4-client')):
+            options = session.ipv4_options(protocol)
+            self.assertEqual(options[:2], ['--proto', transport])
+            filters = [options[index:index+3] for index, value in enumerate(options) if value == '--pull-filter']
+            self.assertEqual(filters, [['--pull-filter', 'ignore', name] for name in
+                                      ('ifconfig-ipv6', 'route-ipv6', 'redirect-gateway', 'block-ipv6')])
+            self.assertEqual(options[-2:], ['--redirect-gateway', 'def1'])
+        with self.assertRaises(portal_helper.Refused):
+            session.ipv4_options('tcp6-client')
 
     def test_caller_cannot_select_a_home_profile(self):
         with self.assertRaises(TypeError):

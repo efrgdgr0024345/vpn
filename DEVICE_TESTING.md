@@ -81,6 +81,12 @@ acceptance build, not an always-on or daily-use certification.
 
 ## Acceptance checks
 
+After the billing suspension/recovery, use a fresh session event log rather than
+the earlier dashboard snapshot. IPv4-only client transport is a separate reviewed
+helper update; install it before disabling the host IPv6 stack. Retrieve the new
+private login after administrative password recovery; the old screenshot-exposed
+password must no longer be used. Do not paste login contents or private profiles.
+
 1. Connect using the initial username/password and that device's own profile.
    Confirm full tunnel traffic and the expected VPN exit, not only a green icon.
 2. Let the session span TLS/token renewal. No second password should be typed.

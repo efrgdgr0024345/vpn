@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import resource
+import secrets
 import subprocess
 import sys
 
@@ -18,10 +19,42 @@ if __name__ == '__main__':
 import server_foundation as server
 
 
+def rotate_password():
+    if os.geteuid() != 0:
+        raise server.SetupError('Password recovery requires lab root.')
+    paths = [server.EXPORT/'login.txt'] + [server.EXPORT/'devices'/name/'login.txt'
+                                         for name in ('kali', 'iphone', 'android')]
+    original = server.read_owned(paths[0])
+    values = original.splitlines()
+    if len(values) != 2 or values[0] != server.CLIENT or len(values[1]) < 40:
+        raise server.SetupError('Stored VPN credentials are not ready for recovery.')
+    for path in paths:
+        if server.read_owned(path) != original:
+            raise server.SetupError('Private credential copies differ; review recovery locally.')
+        server.directory(path.parent, 0o700)
+    # Fail closed before changing PAM or its protected copies. An interrupted
+    # reset leaves the VPN stopped for independent root-console recovery.
+    server.run(['/usr/sbin/nft', 'flush', 'set', 'inet', 'vpn_lab', 'authorized'])
+    server.run(['/usr/bin/systemctl', 'stop', 'openvpn-server@vpn-lab.service'])
+    Path('/etc/ssh/vpn-lab-export.keys').unlink(missing_ok=True)
+    for name in ('client.ovpn', 'login.txt'):
+        Path('/var/lib/vpn-lab-export/files', name).unlink(missing_ok=True)
+    password = secrets.token_urlsafe(32)
+    server.run(['/usr/sbin/chpasswd'], data=server.CLIENT+':'+password+'\n')
+    for path in paths:
+        server.write(path, server.CLIENT+'\n'+password+'\n')
+    # Restarting creates a new in-memory token signing secret as well.
+    server.run(['/usr/bin/systemctl', 'start', 'openvpn-server@vpn-lab.service'])
+    return {'password_rotated': True, 'sessions_invalidated': True,
+            'old_download_closed': True, 'credential_contents_returned': False}
+
+
 def administer(operation, device='kali'):
     if os.geteuid() != 0 or device not in ('kali', 'iphone', 'android'):
         raise server.SetupError('Device administration requires lab root and a fixed device name.')
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    if operation == 'rotate-password':
+        return rotate_password()
     path = server.CONFIG/'devices.json'
     devices = json.loads(server.read_owned(path))
     if operation in ('revoke-device', 'enable-device'):
