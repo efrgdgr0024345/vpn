@@ -108,7 +108,7 @@ def main():
                             try:
                                 os.killpg(process.pid,signal.SIGTERM)
                             except ProcessLookupError:
-                                pass
+                                process.poll()  # Reap a daemon already stopped by its broker.
                             process.wait(timeout=10)
                     return ''
                 if argv==['/usr/bin/systemctl','start','openvpn-server@vpn-lab.service']:

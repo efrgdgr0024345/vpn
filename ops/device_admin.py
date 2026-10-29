@@ -45,8 +45,6 @@ def rotate_password():
         server.write(path, server.CLIENT+'\n'+password+'\n')
     # Restarting creates a new in-memory token signing secret as well.
     server.run(['/usr/bin/systemctl', 'start', 'openvpn-server@vpn-lab.service'])
-    return {'password_rotated': True, 'sessions_invalidated': True,
-            'old_download_closed': True, 'credential_contents_returned': False}
 
 
 def administer(operation, device='kali'):
@@ -54,7 +52,11 @@ def administer(operation, device='kali'):
         raise server.SetupError('Device administration requires lab root and a fixed device name.')
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     if operation == 'rotate-password':
-        return rotate_password()
+        rotate_password()
+        # The credential-handling function returns no data. Only this fixed
+        # success report can reach workflow logs after recovery completes.
+        return {'password_rotated': True, 'sessions_invalidated': True,
+                'old_download_closed': True, 'credential_contents_returned': False}
     path = server.CONFIG/'devices.json'
     devices = json.loads(server.read_owned(path))
     if operation in ('revoke-device', 'enable-device'):

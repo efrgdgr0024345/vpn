@@ -92,7 +92,8 @@ application upgrade or a way to overwrite an installation-integrity warning.
 System-wide IPv6 disablement is a separate, explicit Kali step after the
 compatible helper is installed. Keep normal networking recovery available and
 verify the actual host after applying it; the container tests do not establish
-Kali's boot or NetworkManager behavior.
+Kali's boot or NetworkManager behavior. `IPV4_ONLY.md` in the repository root
+and the tracked `deployments/kali/` files describe persistent GRUB/sysctl setup.
 
 ## Connect and stop
 

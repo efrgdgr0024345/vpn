@@ -1,5 +1,4 @@
 from contextlib import ExitStack, contextmanager
-import hashlib
 import json
 import os
 from pathlib import Path
