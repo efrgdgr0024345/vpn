@@ -202,6 +202,19 @@ class ActionTests(PolicyFixture):
 
 
 class NetworkTests(unittest.TestCase):
+    def test_unavailable_ipv6_route_dump_is_accepted_only_when_kernel_disable_is_verified(self):
+        links = [{'ifname': 'wlan0', 'flags': ['UP']}]
+        routes = [{'dst': 'default', 'dev': 'wlan0', 'gateway': '192.0.2.1'}]
+        for disabled in (True, False):
+            with patch.object(h, 'load_policy', return_value=POLICY), \
+                    patch.object(h, 'active_openvpn', return_value=False), \
+                    patch.object(h, 'js', side_effect=[links, routes, h.Refused('IPv6 unavailable')]), \
+                    patch.object(h.session_channel, 'kernel_ipv6_disabled', return_value=disabled):
+                if disabled:
+                    h.check_network()
+                else:
+                    with self.assertRaises(h.Refused):
+                        h.check_network()
     def check(self, links=None, routes=None):
         links = links if links is not None else [{'ifname': 'lo'}, {'ifname': 'wlan0', 'flags': ['UP']}]
         routes = routes if routes is not None else [{'dst': 'default', 'dev': 'wlan0', 'gateway': '192.0.2.1'}]

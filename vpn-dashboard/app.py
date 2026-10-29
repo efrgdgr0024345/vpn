@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import launch_vpn
+import session_channel
 from safe_io import bounded_run, private_write
 from security import Refused
 import threading
@@ -121,10 +122,13 @@ def summarize(results):
                     len([x for x in services.output.splitlines() if x.strip()]) if services.ok
                     else 'OpenVPN service information unavailable')
     ipv6 = json_list(results['routes6'])
+    ipv6_text = ('DISABLED — IPv6 is disabled by the kernel boot setting'
+                 if session_channel.kernel_ipv6_disabled() else
+                 'UNKNOWN — routes unavailable' if ipv6 is None else
+                 'IPv6 routes observed: %d; firewall coverage NOT verified' % len(ipv6))
     return {'Tunnel': tunnel_text, 'Routes': route_text, 'Firewall': firewall_text,
             'Backend': backend_text, 'DNS': dns_text, 'Services': service_text,
-            'IPv6': 'UNKNOWN — routes unavailable' if ipv6 is None else
-            'IPv6 routes observed: %d; firewall coverage NOT verified' % len(ipv6)}
+            'IPv6': ipv6_text}
 
 
 def collect(runner=run_command):

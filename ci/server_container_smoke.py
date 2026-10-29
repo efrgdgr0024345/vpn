@@ -97,6 +97,8 @@ def main():
             print(json.dumps(server_selftest.test(broker.pid),sort_keys=True),flush=True)
             PHASE='owned app supervisor'
             client_control_smoke.supervisor_with_real_openvpn()
+            PHASE='no-reply client diagnostics'
+            client_control_smoke.timeout_without_server()
             PHASE='real password recovery'
             old_login=login.read_bytes()
             real_run=foundation.run

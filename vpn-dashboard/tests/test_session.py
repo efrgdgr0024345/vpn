@@ -13,6 +13,62 @@ class SessionTests(unittest.TestCase):
         patcher=patch.object(session.network_setup,'prepare')
         patcher.start()
         self.addCleanup(patcher.stop)
+        history=patch.object(session.session_channel,'save_last')
+        history.start()
+        self.addCleanup(history.stop)
+
+    def test_startup_deadline_distinguishes_no_reply_handshake_and_credentials(self):
+        watch=session.StartupWatch(0)
+        self.assertIsNone(watch.expired(179))
+        self.assertEqual(watch.expired(180),'startup_timeout')
+        watch=session.StartupWatch(0)
+        watch.observe('transport_start',10)
+        self.assertEqual(watch.expired(70),'server_timeout')
+        watch.observe('server_replied',71)
+        self.assertEqual(watch.expired(72),'handshake_timeout')
+        watch.observe('tunnel_ready',73)
+        self.assertIsNone(watch.expired(1000))
+        watch.observe('reconnecting',1001)
+        self.assertEqual(watch.expired(1061),'server_timeout')
+
+    def test_retries_do_not_reset_the_startup_timeout(self):
+        watch=session.StartupWatch(0)
+        watch.observe('transport_start',1)
+        for now in (10,20,30,40,50):
+            watch.observe('reconnecting',now)
+            watch.observe('transport_start',now+1)
+        self.assertEqual(watch.expired(61),'server_timeout')
+
+    def test_socket_metadata_uses_only_the_owned_process_and_pinned_endpoint(self):
+        events=session.session_channel.Events()
+        events.set_details({'server_ipv4':'192.0.2.10','server_port':1194,'protocol':'udp4'})
+        rows=[('192.0.2.3',45000,'192.0.2.20',1194),('192.0.2.4',50000,'192.0.2.10',1194)]
+        with patch.object(session,'owned_socket_rows',return_value=rows) as owned,patch('builtins.print'):
+            session.socket_details(events,123)
+            owned.assert_called_once_with(123,'udp')
+        self.assertEqual(events.snapshot()['details']['local_ipv4'],'192.0.2.4')
+        self.assertEqual(events.snapshot()['details']['local_port'],50000)
+
+    def test_proc_socket_parser_rejects_inodes_not_owned_by_the_child(self):
+        row='0: 040200C0:C350 0A0200C0:04AA 01 0:0 0:0 0 0 0 10\n'
+        rows=session.parse_socket_rows(row+row.replace(' 10\n',' 999\n'),{10})
+        self.assertEqual(rows,[('192.0.2.4',50000,'192.0.2.10',1194)])
+
+    def test_unavailable_diagnostics_do_not_change_networking_or_abort_the_session(self):
+        events=session.session_channel.Events()
+        with patch.object(session,'diagnostic',return_value=None), \
+                patch.object(session.network_setup,'resolver_read',side_effect=OSError('fixture')):
+            session.socket_details(events,123)
+            session.tunnel_details(events)
+        self.assertEqual(events.snapshot()['details'],{})
+
+    def test_history_storage_failure_reports_only_the_os_error_number(self):
+        events=session.session_channel.Events()
+        with patch.object(session.session_channel,'save_last',side_effect=OSError(95,'PRIVATE_ERROR_TEXT')), \
+                patch('builtins.print') as output:
+            session.retain_last(1000,events,None)
+        self.assertIn('OS error 95',output.call_args.args[0])
+        self.assertNotIn('PRIVATE_ERROR_TEXT',output.call_args.args[0])
 
     def test_pidfd_acquisition_failure_cleans_up_the_owned_child(self):
         process=SimpleNamespace(pid=123,stdout=SimpleNamespace(close=lambda:None),

@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 139 desktop and 62 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 155 desktop and 64 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
@@ -61,6 +61,15 @@ The real VPN container also replaces the PAM password and private copies,
 restarts OpenVPN/broker, rejects the previous password over TLS and connects
 with the replacement. Only systemd's stop/start commands are substituted with
 the container-owned processes; PAM, chpasswd, nft and credential writes are real.
+Connection diagnostics tests cover strict endpoint/version/cipher extraction,
+owned socket inodes, stage timing and bounded startup/reconnect budgets. A real
+OpenVPN client aimed at a closed loopback port must time out, stop only its owned
+child, and retain typed endpoint/stage details. Real filesystem tests require
+root-owned history with a named-user read ACL: the owner can read but cannot
+overwrite it, and another ordinary UID cannot read it. Viewer tests distinguish
+live and saved reports, and reject corrupt metadata/control characters. Kernel
+IPv6 disablement can excuse only an unavailable IPv6 route query; enabled IPv6
+and all IPv4 checks remain strict.
 
 ## GitHub security review
 

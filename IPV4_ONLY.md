@@ -9,17 +9,17 @@ helper update described in `vpn-dashboard/INSTALL.md` before disabling IPv6.
 It ignores the older server's IPv6 tunnel/route pushes, uses an explicit IPv4
 transport, and keeps IPv4 `redirect-gateway def1` locally enforced.
 
-For a reviewed transport helper and updater, verify both independently supplied
-SHA256 values before executing:
+For a reviewed public update directory and updater, verify the updater and
+`client-update.json` against independently supplied SHA256 values before executing:
 
 ```sh
 sudo /usr/bin/python3 -I -B ops/upgrade_client_transport.py \
-  vpn-dashboard/vpn_session_helper.py VERIFIED_HELPER_SHA256
+  /path/to/public-update-directory VERIFIED_UPDATE_MANIFEST_SHA256
 ```
 
 The updater recognizes the earlier protected transport by its known SHA256 and
 checks the public-code manifest, metadata and process/action locks before writes.
-It updates only that helper and its manifest entry; unknown modifications are
+It updates the six fixed transport/logging/IPv6-check module copies and their manifest entries; unknown modifications are
 preserved and refused. Private profiles, login files and recovery state remain
 unchanged. It does not turn off IPv6 by itself.
 

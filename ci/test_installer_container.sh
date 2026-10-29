@@ -14,6 +14,7 @@ docker exec "$container" mkdir /test
 docker cp vpn-dashboard "$container:/test/vpn-dashboard"
 docker cp ci/installer_smoke.py "$container:/test/installer_smoke.py"
 docker cp ops/upgrade_client_transport.py "$container:/test/upgrade_client_transport.py"
+docker cp deployments/kali/client-update.json "$container:/test/vpn-dashboard/client-update.json"
 docker exec "$container" chown -R 0:0 /test
 if [ "$#" -ge 1 ]; then
   docker cp "$1" "$container:/test/legacy.zip"

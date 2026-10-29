@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import stat
 import subprocess
+import session_channel
 
 from safe_io import bounded_run
 from security import Refused, load_policy, service_account
@@ -248,7 +249,12 @@ def check_network():
         if link.get('ifname', '').startswith(('tun', 'tap', 'wg')) or kind in ('tun', 'wireguard', 'gre', 'ipip', 'sit', 'vti', 'xfrm'):
             raise Refused('An unmanaged tunnel exists.')
     for family in ('-4', '-6'):
-        routes = js([IP, '-j', family, 'route', 'show', 'table', 'all'])
+        try:
+            routes = js([IP, '-j', family, 'route', 'show', 'table', 'all'])
+        except Refused:
+            if family == '-6' and session_channel.kernel_ipv6_disabled():
+                continue
+            raise
         if not isinstance(routes, list) or not all(isinstance(r, dict) for r in routes):
             raise Refused('Cannot verify routes.')
         if any(r.get('dev', '').startswith(('tun', 'tap', 'wg')) or 'encap' in r for r in routes):

@@ -61,9 +61,25 @@ incompatible IPv6 server pushes while retaining a local IPv4 full-tunnel redirec
 A narrow, checked updater preserves the protected private configuration and
 updates the public transport baseline. Whole-host IPv6 disablement and physical
 Kali acceptance are still pending. The screenshot exposed the initial password;
-root-only administrative recovery is being added to replace it privately and
-invalidate outstanding sessions. This is not continuous bootstrap-password
+root-only administrative recovery replaced it privately and invalidated sessions
+(`40803611026`, controller source `e352bb4`). Post-reset live acceptance
+`40804306078` passed. A replacement Kali login was prepared behind the owner's
+existing SSH download key (`40804723683`); retrieval/closure confirmation is still
+pending. The first Kali scp attempt reported `Network is unreachable`; its next
+route snapshot showed wlan0 up with a default route through a different LAN
+(`10.15.192.0/24`). The actual current DHCP identifier must be checked rather
+than inferred from that gateway before reviewing the saved local policy.
+This is not continuous bootstrap-password
 rotation or the still-unimplemented complete rotating-handoff credential lifecycle.
+
+The owner requested fuller connection logs while transport diagnosis continues.
+The prepared logging update retains typed network endpoints, interface/route/DNS
+observations, cipher/version names, elapsed stage times, refusal categories and
+child exit status. Startup/reconnect waits are bounded. Root-written last-attempt
+records use an owner-only read ACL and remain explicitly historical after the
+live helper exits. Public update manifests cover all matching module copies;
+private profiles/credentials are preserved. See SESSION_LOGGING.md. New logging
+and persistent IPv6 settings are not yet installed on the physical Kali host.
 
 The owner resumed installation after rebooting Kali. The protected helper was
 still absent. Source permission preparation let the exact `04639eb` installer

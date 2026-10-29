@@ -1,6 +1,7 @@
 """Real Unix credentials/process descriptors in the disposable Debian container."""
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import subprocess
@@ -58,6 +59,10 @@ def supervisor_with_real_openvpn():
             families={item['family'] for link in addresses for item in link.get('addr_info',[])}
             if 'inet' not in families or 'inet6' in families:
                 raise RuntimeError('The real client did not configure IPv4 while ignoring IPv6 server pushes.')
+            if (snapshot['details'].get('server_port')!=1194 or snapshot['details'].get('protocol')!='udp4'
+                    or not snapshot['details'].get('tunnel_ipv4')
+                    or snapshot['details'].get('tls_version')!='TLSv1.3'):
+                raise RuntimeError('The live client log omitted its verified endpoint, tunnel or TLS details.')
             channel.request('stop')
             process.wait(timeout=15)
             if process.returncode:
@@ -81,6 +86,34 @@ def supervisor_with_real_openvpn():
                     process.wait(timeout=5)
             subprocess.run(['/usr/sbin/ip','tuntap','del','dev','tun-app-test','mode','tun'],check=True,timeout=5)
     print('PASS: app supervisor over real TLS/PAM, IPv4-only tunnel addressing despite IPv6 server pushes, private status and scoped Disconnect.',flush=True)
+
+
+def timeout_without_server():
+    with tempfile.TemporaryDirectory(prefix='vpn-no-reply-',dir='/run') as directory:
+        profile=Path(directory)/'client.ovpn'
+        original=Path('/root/vpn-lab/client.ovpn').read_text()
+        profile.write_text(re.sub(r'^remote .*$', 'remote 127.0.0.1 61194', original, flags=re.M))
+        profile.chmod(0o600)
+        command=['/usr/sbin/openvpn','--config',str(profile),
+                 '--auth-user-pass','/root/vpn-lab/login.txt','--auth-nocache','--dev','tun-no-reply',
+                 '--dev-type','tun','--ifconfig-noexec','--route-noexec','--script-security','1']
+        command+=transport.ipv4_options('udp')
+        program=('import sys;sys.path.insert(0,'+repr(str(ROOT/'vpn-dashboard'))+');'
+                 'import vpn_session_helper as s;w=s.StartupWatch;'
+                 's.StartupWatch=lambda now:w(now,network_seconds=2,overall_seconds=4);'
+                 's.network_setup.verify_during_session=lambda:True;'
+                 'raise SystemExit(s.controlled_session('+repr(command)+',1000))')
+        result=subprocess.run(['/usr/bin/python3','-I','-B','-c',program],
+                              stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=20)
+        record=json.loads((channel.HISTORY/'1000.json').read_text())
+        snapshot=channel.validate_snapshot(record['snapshot'])
+        if (result.returncode==0 or snapshot['state']!='error'
+                or 'server_timeout' not in {row['code'] for row in snapshot['events']}
+                or snapshot['details'].get('server_ipv4')!='127.0.0.1'
+                or snapshot['details'].get('server_port')!=61194
+                or any(word in result.stdout for word in (b'SESS_ID_',b'BEGIN PRIVATE',b'PUSH_REPLY'))):
+            raise RuntimeError('No-reply timeout or private last-attempt diagnostics did not match policy.')
+    print('PASS: real OpenVPN no-reply timeout stops the owned child and retains endpoint/stage diagnostics without secrets.',flush=True)
 
 
 def main():
@@ -124,6 +157,20 @@ def main():
                 owned.wait(timeout=5)
                 if other.poll() is not None:
                     raise RuntimeError('Session stop affected an unrelated process.')
+                channel.save_last(1000,events.snapshot(),0)
+                for uid in (1000,1002):
+                    script=(('import sys;sys.path.insert(0,'+repr(str(ROOT/'vpn-dashboard'))+');'
+                             'import session_channel as c;c.read_last();print("readable")') if uid==1000 else
+                            'from pathlib import Path;Path("/var/lib/vpn-desk-history/1000.json").read_bytes();print("readable")')
+                    result=subprocess.run(['/usr/bin/python3','-I','-B','-c',script],
+                        user=uid,group=uid,extra_groups=[],capture_output=True,text=True,timeout=5)
+                    if (uid==1000)!=(result.returncode==0):
+                        raise RuntimeError('Private last-attempt history was not scoped to its desktop owner.')
+                script='from pathlib import Path;Path("/var/lib/vpn-desk-history/1000.json").write_text("tamper")'
+                result=subprocess.run(['/usr/bin/python3','-I','-B','-c',script],user=1000,group=1000,
+                                      extra_groups=[],capture_output=True,text=True,timeout=5)
+                if result.returncode==0:
+                    raise RuntimeError('The desktop owner could modify privileged saved session history.')
         finally:
             os.close(pidfd)
             for process in (owned,other):

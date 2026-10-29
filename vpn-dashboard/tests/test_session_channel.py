@@ -51,7 +51,8 @@ class SessionEventsTests(unittest.TestCase):
         original=events.snapshot()
         cases=[{**original,'password':'SECRET'},{**original,'state':['bad']},
                {**original,'version':True}]
-        for key,value in (('code','SECRET'),('code',[]),('utc','not a timestamp'),('sequence',True)):
+        for key,value in (('code','SECRET'),('code',[]),('utc','not a timestamp'),
+                          ('utc','2026-10-29\n01:00:00+00:00'),('sequence',True)):
             snapshot=copy.deepcopy(original)
             snapshot['events'][0][key]=value
             cases.append(snapshot)

@@ -79,15 +79,19 @@ guard unchanged. This allows the existing server configuration to coexist with
 an IPv4-only client. It does not itself disable IPv6 across the operating system.
 
 For the installed earlier helper, the explicit
-`ops/upgrade_client_transport.py` accepts an independently hash-verified candidate
-file and its SHA256. Run using system Python with `sudo /usr/bin/python3 -I -B`.
+`ops/upgrade_client_transport.py` accepts a public update directory containing
+the five reviewed Python sources and `client-update.json`, plus the independently
+verified SHA256 of that manifest. Verify the updater itself separately as well.
+Run using system Python with `sudo /usr/bin/python3 -I -B`.
 The reviewed updater requires no active OpenVPN or held action lock, checks the
 protected public-code baseline, refuses unknown changes/shadow modules, replaces
-only the known transport helper and updates its manifest entry. It preserves
+only the six known transport/logging/IPv6-check module copies and updates their manifest entries. It preserves
 private profiles, passwords, policies, firewall, DNS and recovery state. A known
-interruption between the helper and manifest writes can finish on rerun; unknown
+interruption between the module and manifest writes can finish on rerun; unknown
 differences remain a refusal. This is a narrow transport update, not a general
 application upgrade or a way to overwrite an installation-integrity warning.
+Close VPN Desk before the update and reopen it afterwards so the UI loads the
+matching protocol/schema. `SESSION_LOGGING.md` describes the richer diagnostics.
 
 System-wide IPv6 disablement is a separate, explicit Kali step after the
 compatible helper is installed. Keep normal networking recovery available and

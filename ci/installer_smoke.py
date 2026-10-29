@@ -1,6 +1,7 @@
 """Run the actual guided root installer only in a disposable test container."""
 import io
 import hashlib
+import json
 import os
 from pathlib import Path
 import pty
@@ -159,19 +160,23 @@ def main():
     if result!=0 or 'Reusing the existing protected configuration' not in output:
         raise RuntimeError('The installed configuration could not be reused.')
     PHASE = 'reviewed transport upgrade'
-    candidate = ROOT/'vpn-dashboard/vpn_session_helper.py'
+    candidate = ROOT/'vpn-dashboard'
+    update_manifest = json.loads((candidate/'client-update.json').read_text())
     private_config = {path: path.read_bytes() for path in Path('/etc/vpn-desk').iterdir()}
     for _ in range(2):
         result = subprocess.run(['/usr/bin/python3','-I','-B',str(ROOT/'upgrade_client_transport.py'),
-                        str(candidate),hashlib.sha256(candidate.read_bytes()).hexdigest()],
+                        str(candidate),hashlib.sha256((candidate/'client-update.json').read_bytes()).hexdigest()],
                        timeout=15,capture_output=True,text=True)
         if result.returncode:
             if result.stdout.startswith('Upgrade stopped: ') and len(result.stdout) < 256:
                 print('::error title=Transport upgrade fixture::'+result.stdout.strip(),flush=True)
             raise RuntimeError('The reviewed transport upgrade did not complete.')
-    if (Path('/usr/local/libexec/vpn-desk/vpn_session_helper.py').read_bytes()!=candidate.read_bytes()
+    if (Path('/usr/local/libexec/vpn-desk/vpn_session_helper.py').read_bytes()!=(candidate/'vpn_session_helper.py').read_bytes()
             or any(path.read_bytes()!=value for path,value in private_config.items())):
         raise RuntimeError('The transport upgrade changed private configuration or missed its target.')
+    for name in ('app.py','session_channel.py','session_ui.py'):
+        if hashlib.sha256(Path('/opt/vpn-desk',name).read_bytes()).hexdigest()!=update_manifest['files'][name]:
+            raise RuntimeError('The desktop logging modules did not match the reviewed bundle.')
     audit = ('import sys;sys.path.insert(0,"/opt/vpn-desk");import install_audit;'
              'raise SystemExit(0 if install_audit.check()["state"]=="matches_baseline" else 1)')
     subprocess.run(['/usr/bin/python3','-I','-B','-c',audit],check=True,timeout=10)

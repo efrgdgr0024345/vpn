@@ -32,6 +32,10 @@ class UpgradeTests(unittest.TestCase):
             for path in [*(Path(p) for p in exact), *(app / ('public'+str(i)+'.py') for i in range(7))]:
                 path.write_bytes(b'# public fixture\n')
                 files[str(path)] = upgrade.digest(path.read_bytes())
+            for path in (helpers/'session_channel.py', app/'session_channel.py', app/'session_ui.py',
+                         helpers/'portal_helper.py', app/'app.py'):
+                path.write_bytes(OLD)
+                files[str(path)] = upgrade.digest(OLD)
             manifest.write_text(json.dumps({'version': 1, 'files': files}))
             private = base / 'client.ovpn'
             private.write_bytes(b'private fixture must remain unchanged')
@@ -41,7 +45,8 @@ class UpgradeTests(unittest.TestCase):
                 return SimpleNamespace(st_uid=0, st_mode=info.st_mode, st_nlink=info.st_nlink)
             for name, value in {'HELPER': helper, 'MANIFEST': manifest, 'LOCK': base/'lock',
                                 'ROOTS': (app, helpers), 'EXACT': exact,
-                                'OLD_SHA256': upgrade.digest(OLD)}.items():
+                                'OLD_SHA256': upgrade.digest(OLD),
+                                'LEGACY': {name: {upgrade.digest(OLD)} for name in upgrade.LEGACY}}.items():
                 stack.enter_context(patch.object(upgrade, name, value))
             stack.enter_context(patch.object(upgrade.os, 'fstat', side_effect=root_metadata))
             stack.enter_context(patch.object(upgrade, 'read_file', side_effect=lambda p: p.read_bytes()))
@@ -138,3 +143,32 @@ class UpgradeTests(unittest.TestCase):
             os.link(source, link)
             with self.assertRaises(upgrade.UpgradeError):
                 upgrade.read_file(source, source=True)
+
+    def test_complete_bundle_updates_both_channel_copies_and_preserves_private_config(self):
+        with self.fixture():
+            bundle = {name: (NEW, upgrade.digest(NEW)) for name in upgrade.targets()}
+            for _ in range(2):
+                upgrade.upgrade(NEW, upgrade.digest(NEW), bundle=bundle)
+                files = json.loads(upgrade.MANIFEST.read_text())['files']
+                for paths in upgrade.targets().values():
+                    for path in paths:
+                        self.assertEqual(path.read_bytes(), NEW)
+                        self.assertEqual(files[str(path)], upgrade.digest(NEW))
+
+    def test_public_bundle_manifest_is_pinned_and_cannot_import_private_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            for name in upgrade.targets():
+                (source/name).write_bytes(NEW)
+            manifest = {'version': 1, 'files': {name: upgrade.digest(NEW) for name in upgrade.targets()}}
+            path = source/'client-update.json'
+            path.write_text(json.dumps(manifest))
+            with patch.object(upgrade, 'read_file', side_effect=lambda p, **kwargs: p.read_bytes()):
+                bundle = upgrade.load_bundle(source, upgrade.digest(path.read_bytes()))
+                self.assertEqual(set(bundle), set(upgrade.targets()))
+                with self.assertRaises(upgrade.UpgradeError):
+                    upgrade.load_bundle(source, '0'*64)
+                manifest['files']['../client.ovpn'] = '0'*64
+                path.write_text(json.dumps(manifest))
+                with self.assertRaises(upgrade.UpgradeError):
+                    upgrade.load_bundle(source, upgrade.digest(path.read_bytes()))

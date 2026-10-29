@@ -11,6 +11,9 @@ from security import HELPER_FILES
 class DashboardTests(unittest.TestCase):
     def fixtures(self):
         return {key: app.Result(False, error='denied') for key in app.COMMANDS}
+    def test_verified_kernel_ipv6_disable_is_reported_even_without_ipv6_routes(self):
+        with patch.object(app.session_channel, 'kernel_ipv6_disabled', return_value=True):
+            self.assertIn('DISABLED', app.summarize(self.fixtures())['IPv6'])
     def test_permission_denied_never_secure(self):
         result = app.summarize(self.fixtures())
         self.assertIn('UNKNOWN', result['Firewall'])
