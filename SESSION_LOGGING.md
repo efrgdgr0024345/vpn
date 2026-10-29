@@ -9,9 +9,31 @@ and cipher names, tunnel address/MTU, mssfix, DNS configuration and local route
 checks. Missing values are explicitly "not observed" in the viewer/export.
 
 Network addresses are intentionally included at the owner's request. No external
-IP-check service or telemetry is used. Route lookups are local kernel queries;
-the logger does not send connectivity probes. The configured DNS target and a
-matching resolver file do not establish that a DNS query succeeded.
+IP-check service or telemetry is used. Route lookups are local kernel queries.
+After tunnel initialization, the helper separately checks the VPN resolver with
+a fixed `example.com` IPv4 DNS query. The configured DNS target and a matching
+resolver file alone do not establish that a DNS query succeeded.
+
+## DNS health
+
+The DNS check runs in a worker with a three-second socket deadline, leaving
+OpenVPN output, Stop and local status responsive. It first requires a route to
+`172.27.240.1` over `tun0` and an IPv4 address on that interface. Its socket is
+bound to `tun0` and the tunnel address. It never tries a Wi-Fi DNS server or a
+public fallback. Queries go to the VPS resolver; ordinary recursive resolution
+can then contact authoritative DNS servers or use the VPS cache.
+
+The session log records a fixed status and elapsed time: a valid IPv4 answer,
+timeout, SERVFAIL, REFUSED, truncated/invalid response, missing answer or route,
+or transport failure. It excludes raw DNS responses. A healthy result tests this
+one lookup; it does not establish browser settings, general internet access,
+DNSSEC validation, leak prevention or future availability.
+
+Checks repeat every 30 seconds while the tunnel is initialized. Only one worker
+can run at once. Reconnect or stop invalidates the preceding result, so a late
+reply cannot mark a new connection healthy. DNS failure is visible separately
+from OpenVPN's initialized state and does not open the kill switch or stop a
+recoverable tunnel. See DNS_TROUBLESHOOTING.md for physical checks and recovery.
 
 ## Expected sequence
 

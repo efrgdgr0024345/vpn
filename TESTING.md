@@ -11,11 +11,17 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 155 desktop and 64 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 168 desktop and 64 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
 files. It does not change the runner's host resolver or default route.
+The same isolated namespace also creates a veth named `tun0` and a resolver in
+a separate peer namespace. The actual bound UDP health check must distinguish
+a valid answer, SERVFAIL and a three-second timeout under the real app guard,
+refuse missing/wrong tunnel routes without sending, and preserve the firewall.
+Unit regressions cover malformed DNS packets, CNAME chains, source/interface
+binding, one outstanding nonblocking probe and reconnect/stop generation fencing.
 
 Separate digest-pinned Debian 13 containers exercise real OpenSSH/SFTP safeguards,
 certificates, PAM, OpenVPN, private DNS and NAT. VPN tests check competing owners,

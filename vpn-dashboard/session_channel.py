@@ -29,6 +29,17 @@ MESSAGES = {
     'guard_checked': 'The configured firewall baseline passed its startup check.',
     'dns_configured': 'DNS is configured to use the private VPN resolver.',
     'dns_repaired': 'The resolver file changed; the private VPN DNS policy was restored under the guard.',
+    'dns_checking': 'Checking the private VPN resolver through tun0; the firewall remains enabled.',
+    'dns_ok': 'The private VPN resolver answered the fixed DNS test through tun0. This is not a full internet or leak test.',
+    'dns_timeout': 'The private VPN DNS test timed out. No alternative resolver was used; the kill switch remains enabled.',
+    'dns_servfail': 'The private VPN resolver returned SERVFAIL; check its upstream resolution, DNSSEC validation and server clock.',
+    'dns_refused': 'The private VPN resolver refused the test query; check resolver access rules and VPN authorization.',
+    'dns_truncated': 'The private VPN DNS reply was truncated; this UDP test could not verify resolution.',
+    'dns_invalid': 'The private VPN DNS reply failed the fixed-query validation; no reply contents were retained.',
+    'dns_no_answer': 'The private VPN DNS reply contained no usable A answer for the fixed test query.',
+    'dns_rcode_error': 'The private VPN resolver returned a DNS error for the fixed test query.',
+    'dns_route_unavailable': 'The private VPN DNS test was not sent: a tun0 route and matching tunnel source could not be verified.',
+    'dns_transport_failed': 'The private VPN DNS socket could not complete the test through tun0.',
     'credentials': 'Enter VPN credentials in the authentication terminal.',
     'transport_start': 'Contacting the VPN server over IPv4; waiting for a reply.',
     'server_replied': 'The VPN server replied; TLS negotiation is in progress.',
@@ -69,6 +80,7 @@ DETAIL_LABELS = {
     'tunnel_ipv4': 'Tunnel IPv4', 'tunnel_interface': 'Tunnel interface',
     'tunnel_mtu': 'Tunnel MTU', 'mssfix': 'Configured mssfix',
     'dns_ipv4': 'Configured VPN DNS', 'dns_file_verified': 'DNS file matches managed configuration',
+    'dns_health': 'Private VPN DNS test status', 'dns_latency_ms': 'Private VPN DNS test elapsed milliseconds',
     'route_interface': 'IPv4 route lookup interface', 'split_routes_verified': 'Both IPv4 full-tunnel /1 routes observed',
     'ipv6_kernel_disabled': 'IPv6 disabled at kernel boot',
     'preflight_reason': 'Startup refusal reason',
@@ -88,6 +100,11 @@ CONTROL_CIPHERS = {'TLS_AES_256_GCM_SHA384', 'TLS_AES_128_GCM_SHA256', 'TLS_CHAC
                    'ECDHE-ECDSA-AES256-GCM-SHA384', 'ECDHE-ECDSA-AES128-GCM-SHA256',
                    'ECDHE-RSA-AES256-GCM-SHA384', 'ECDHE-RSA-AES128-GCM-SHA256'}
 DATA_CIPHERS = {'AES-256-GCM', 'AES-128-GCM', 'CHACHA20-POLY1305'}
+DNS_HEALTH = {'unchecked', 'checking', 'ok', 'timeout', 'servfail', 'refused',
+              'truncated', 'invalid', 'no_answer', 'rcode_error', 'route_unavailable', 'transport_failed'}
+DNS_RECOVERY = ('DNS is not verified. The tunnel may remain open and the kill switch stays enabled. '
+                'To return to normal networking, press Ctrl+C in the VPN terminal, wait for it to stop, '
+                'then use Restore normal networking.')
 
 
 class ChannelError(RuntimeError):
@@ -186,6 +203,10 @@ def validate_details(details):
             valid = isinstance(value, str) and value == value.strip() and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_. -]{0,252}', value) is not None
         elif key == 'preflight_reason':
             valid = isinstance(value, str) and value in REFUSALS
+        elif key == 'dns_health':
+            valid = isinstance(value, str) and value in DNS_HEALTH
+        elif key == 'dns_latency_ms':
+            valid = type(value) is int and 0 <= value <= 10000
         else:
             choices = {'protocol': {'udp4', 'tcp4-client'}, 'tls_version': {'TLSv1.2', 'TLSv1.3'},
                        'control_cipher': CONTROL_CIPHERS, 'data_cipher': DATA_CIPHERS}
@@ -399,6 +420,8 @@ def request(action='status', path=SOCKET):
 def format_events(snapshot):
     validate_snapshot(snapshot)
     text = format_details(snapshot['details'], include_unknown=True)+'\n\n'+'\n'.join(format_event(row) for row in snapshot['events'])+'\n'
+    if snapshot['details'].get('dns_health', 'unchecked') not in ('unchecked', 'checking', 'ok'):
+        text += '\n'+DNS_RECOVERY+'\n'
     if snapshot['state'] in ('error', 'stopped'):
         text += ('\nAfter stopping the VPN, use Restore normal networking or run:\n'
                  'sudo -- /usr/bin/python3 -I -B /usr/local/libexec/vpn-desk/privileged.py network-restore\n')

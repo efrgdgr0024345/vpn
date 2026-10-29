@@ -1,5 +1,23 @@
 # Project history and current status
 
+## Kali DNS troubleshooting follow-up
+
+The owner reports that browsers stop working during VPN connection attempts.
+The precise client-side fault remains unconfirmed: a configured resolver and an
+OpenVPN initialized message do not establish working DNS. A read-only lab
+inventory (`40811328788`) confirms OpenVPN, broker and Unbound running with DNS
+and VPN ports listening; it does not establish physical Kali reachability.
+
+The client now checks private DNS asynchronously after tunnel initialization,
+bound to the verified `tun0` source/interface, with a bounded socket deadline,
+typed failure reasons and reconnect/stop fencing. It preserves the guard and
+does not try LAN or public fallback resolvers. The narrow updater accepts both
+the original installed modules and the previously supplied `22aef95` logging
+bundle. Local units and a real isolated namespace/guard test passed. GitHub
+results and physical installation/connection acceptance remain separate checks.
+DNS_TROUBLESHOOTING.md records the next physical checks, explicit recovery and
+the still-unresolved stale DHCP/recovery settings when changing Wi-Fi networks.
+
 Current work supersedes the earlier client plan: the owner requested our own
 standalone app, local logs and reviewable code, rejected a NetworkManager VPN
 plugin, and explicitly requested GitHub security/code review. OWNED_CLIENT.md

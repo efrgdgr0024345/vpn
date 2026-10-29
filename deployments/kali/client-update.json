@@ -2,9 +2,9 @@
   "files": {
     "app.py": "b7059093b2d6c9804202b991323cf574cfeb7963dee425aa4b4a40ce993dcaf6",
     "portal_helper.py": "96da266dc8f906aad8d5a3bfe2302156c5e855067f61917d4845b7209c9095be",
-    "session_channel.py": "d3981174df69eb01f1bc96606aa8eac0faa3a014340fc1c8123f0df58f3f8cb6",
+    "session_channel.py": "d4a386d14ec26728c618b8da8c0f8302a2783e7e32ba95a09e1252fc13aad7fe",
     "session_ui.py": "e812ee4fdee34c182026ec5959c293b3715e68a204f640adb40d7445238eabcf",
-    "vpn_session_helper.py": "0ab9f832632d035a5f6d393458931c8741c0e6b833ad27daba74a1b7199b0fad"
+    "vpn_session_helper.py": "66e6cd175989f8ca408c18ce791577947c3db15bd093a81e436132b1f64240b5"
   },
   "version": 1
 }

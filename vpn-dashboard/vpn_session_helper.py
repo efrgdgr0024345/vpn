@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Explicit root session: close/verify portal, serialize against portal opening."""
 import fcntl
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,9 @@ import re
 import socket
 import struct
 import subprocess
+import queue
+import secrets
+import threading
 import time
 import session_channel
 import network_setup
@@ -223,6 +227,198 @@ def tunnel_details(events):
         return
 
 
+DNS_QUESTION = b'\x07example\x03com\x00' + struct.pack('!HH', 1, 1)
+DNS_NAME = (b'example', b'com')
+
+
+def dns_name(packet, offset):
+    """Read one bounded DNS name, rejecting compression loops and bad labels."""
+    labels = []
+    visited = set()
+    end = None
+    size = 1
+    while True:
+        if offset >= len(packet) or offset in visited or len(visited) >= 128:
+            raise ValueError('Invalid DNS name.')
+        visited.add(offset)
+        length = packet[offset]
+        if length & 0xc0 == 0xc0:
+            if offset + 1 >= len(packet):
+                raise ValueError('Invalid DNS pointer.')
+            pointer = ((length & 0x3f) << 8) | packet[offset+1]
+            # A compressed name can only refer to a prior name in the packet.
+            if pointer < 12 or pointer >= offset:
+                raise ValueError('Invalid DNS pointer.')
+            if end is None:
+                end = offset+2
+            offset = pointer
+            continue
+        if length & 0xc0 or offset+1+length > len(packet):
+            raise ValueError('Invalid DNS label.')
+        offset += 1
+        if length == 0:
+            return tuple(labels), end if end is not None else offset
+        labels.append(packet[offset:offset+length].lower())
+        size += length+1
+        if size > 255:
+            raise ValueError('DNS name is too long.')
+        offset += length
+
+
+def dns_reply_status(packet, identifier):
+    """Validate only our fixed query. Return a fixed status, never raw DNS data."""
+    try:
+        if not 12 <= len(packet) <= 4096:
+            return 'invalid'
+        ident, flags, questions, answers, authorities, additional = struct.unpack('!6H', packet[:12])
+        if ident != identifier or flags & 0xf800 != 0x8000 or flags & 0x0040 or questions != 1:
+            return 'invalid'
+        name, offset = dns_name(packet, 12)
+        if name != DNS_NAME or packet[offset:offset+4] != struct.pack('!HH', 1, 1):
+            return 'invalid'
+        offset += 4
+        if flags & 0x0200:
+            return 'truncated'
+        rcode = flags & 15
+        if rcode:
+            return {2: 'servfail', 5: 'refused'}.get(rcode, 'rcode_error')
+        if answers+authorities+additional > 128:
+            return 'invalid'
+        records = []
+        for index in range(answers+authorities+additional):
+            owner, offset = dns_name(packet, offset)
+            if offset+10 > len(packet):
+                return 'invalid'
+            kind, family, _, length = struct.unpack('!HHIH', packet[offset:offset+10])
+            offset += 10
+            end = offset+length
+            if end > len(packet):
+                return 'invalid'
+            target = None
+            if kind == 1 and length != 4:
+                return 'invalid'
+            if kind == 5:
+                target, cname_end = dns_name(packet, offset)
+                if cname_end != end:
+                    return 'invalid'
+            if index < answers and family == 1:
+                records.append((owner, kind, target))
+            offset = end
+        if offset != len(packet):
+            return 'invalid'
+        # Accommodate a bounded CNAME chain, without accepting an unrelated A
+        # record injected elsewhere in the answer or additional section.
+        expected = DNS_NAME
+        seen = set()
+        for _ in range(16):
+            if expected in seen:
+                return 'invalid'
+            seen.add(expected)
+            if any(owner == expected and kind == 1 for owner, kind, _ in records):
+                return 'ok'
+            targets = {target for owner, kind, target in records if owner == expected and kind == 5}
+            if len(targets) != 1:
+                return 'no_answer'
+            expected = next(iter(targets))
+        return 'invalid'
+    except (ValueError, struct.error):
+        return 'invalid'
+
+
+def dns_tunnel_source():
+    routes = diagnostic(['/usr/sbin/ip', '-j', '-4', 'route', 'get', network_setup.DNS])
+    if (not isinstance(routes, list) or len(routes) != 1 or not isinstance(routes[0], dict)
+            or routes[0].get('dev') != 'tun0' or routes[0].get('type', 'unicast') != 'unicast'):
+        return None
+    source = routes[0].get('prefsrc', routes[0].get('src'))
+    try:
+        address = ipaddress.IPv4Address(source)
+        if address.is_unspecified or address.is_multicast or address.is_loopback or str(address) != source:
+            return None
+    except (ValueError, TypeError):
+        return None
+    links = diagnostic(['/usr/sbin/ip', '-j', '-4', 'address', 'show', 'dev', 'tun0'])
+    if not isinstance(links, list):
+        return None
+    for link in links:
+        if (isinstance(link, dict) and link.get('ifname') == 'tun0' and 'UP' in link.get('flags', [])
+                and isinstance(link.get('addr_info'), list)
+                and any(isinstance(item, dict) and item.get('family') == 'inet' and item.get('local') == source
+                        for item in link['addr_info'])):
+            return source
+    return None
+
+
+def private_dns_probe():
+    """One short UDP test, bound to the verified tunnel. Never use a fallback."""
+    source = dns_tunnel_source()
+    if source is None:
+        return 'route_unavailable', 0
+    started = time.monotonic()
+    def result(status):
+        return status, min(10000, int(max(0, time.monotonic()-started)*1000))
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as channel:
+            channel.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b'tun0\0')
+            channel.bind((source, 0))
+            channel.settimeout(3)
+            channel.connect((network_setup.DNS, 53))
+            identifier = secrets.randbelow(65536)
+            question = struct.pack('!6H', identifier, 0x0100, 1, 0, 0, 0)+DNS_QUESTION
+            channel.send(question)
+            packet, peer = channel.recvfrom(4097)
+            if peer != (network_setup.DNS, 53):
+                return result('invalid')
+            return result(dns_reply_status(packet, identifier))
+    except socket.timeout:
+        return result('timeout')
+    except OSError:
+        return result('transport_failed')
+
+
+class DNSHealthWatch:
+    """One bounded worker; only the session loop may publish current results."""
+    def __init__(self):
+        self.generation = 0
+        self.active = False
+        self.next_at = 0
+        self.worker = None
+        self.results = queue.SimpleQueue()
+
+    def observe(self, code):
+        if code == 'tunnel_ready' or code == 'reconnecting' or code == 'stopping' or code in session_channel.FAILURES:
+            self.generation += 1
+            self.active = code == 'tunnel_ready'
+            self.next_at = 0
+            return {'dns_health': 'unchecked', 'dns_latency_ms': 0}
+        return {}
+
+    def _run(self, generation):
+        try:
+            status, elapsed = private_dns_probe()
+        except (OSError, ValueError, TypeError):
+            status, elapsed = 'transport_failed', 0
+        self.results.put((generation, status, elapsed))
+
+    def poll(self, now):
+        updates = []
+        while True:
+            try:
+                generation, status, elapsed = self.results.get_nowait()
+            except queue.Empty:
+                break
+            if self.active and generation == self.generation:
+                updates.append(('dns_'+status, {'dns_health': status, 'dns_latency_ms': elapsed}))
+        if self.worker is not None and not self.worker.is_alive():
+            self.worker = None
+        if self.active and self.worker is None and now >= self.next_at:
+            self.next_at = now+30
+            self.worker = threading.Thread(target=self._run, args=(self.generation,), daemon=True)
+            self.worker.start()
+            updates.append(('dns_checking', {'dns_health': 'checking', 'dns_latency_ms': 0}))
+        return updates
+
+
 def main(owner_uid):
     events = None
     try:
@@ -276,14 +472,24 @@ def controlled_session(command,owner_uid,*,events=None):
     process=None
     pidfd=None
     stop_at=None
-    result=1
+    termination_requested=False
     watch=StartupWatch(time.monotonic())
+    dns_watch=DNSHealthWatch()
+    health_lock=threading.RLock()
     def emit(code):
         if code == 'tunnel_ready':
             tunnel_details(events)
-        row=events.add(code)
-        watch.observe(code,time.monotonic())
-        print(session_channel.format_event(row),flush=True)
+        with health_lock:
+            if code == 'tunnel_ready' and stop_at is not None:
+                return
+            updates = dns_watch.observe(code)
+            if updates:
+                details_update(events, updates)
+            row=events.add(code)
+            watch.observe(code,time.monotonic())
+            print(session_channel.format_event(row),flush=True)
+            if code.startswith('dns_') and code[4:] in session_channel.DNS_HEALTH-{'unchecked', 'checking', 'ok'}:
+                print(session_channel.DNS_RECOVERY,flush=True)
         if code in ('transport_start','server_replied','server_timeout','handshake_timeout') and process is not None and process.poll() is None:
             socket_details(events,process.pid)
         retain_last(owner_uid,events,None)
@@ -295,10 +501,13 @@ def controlled_session(command,owner_uid,*,events=None):
             emit(code)
     def stop():
         nonlocal stop_at
-        if stop_at is None:
-            row=events.add('stopping')
-            print(session_channel.format_event(row),flush=True)
-            stop_at=time.monotonic()
+        # The IPC stop callback runs in a different thread. Serialize health
+        # publication with its reset so an already-completed probe cannot mark
+        # a stopping session healthy after the stop acknowledgement.
+        with health_lock:
+            if stop_at is None:
+                stop_at=time.monotonic()
+                emit('stopping')
         try:
             if pidfd is not None:
                 signal.pidfd_send_signal(pidfd,signal.SIGTERM)
@@ -310,6 +519,11 @@ def controlled_session(command,owner_uid,*,events=None):
         except ProcessLookupError:
             # The child already exited; there is nothing left to signal.
             return
+    def request_termination(number,frame):
+        nonlocal termination_requested
+        # Signal handlers must not acquire a lock that interrupted Python code
+        # may already hold. The session loop handles the request promptly.
+        termination_requested=True
     previous_handler=signal.getsignal(signal.SIGTERM)
     try:
         with session_channel.Server(owner_uid,events,stop):
@@ -321,13 +535,15 @@ def controlled_session(command,owner_uid,*,events=None):
             pidfd=os.pidfd_open(process.pid)
             if stop_at is not None:
                 signal.pidfd_send_signal(pidfd,signal.SIGTERM)
-            signal.signal(signal.SIGTERM,lambda number,frame:stop())
+            signal.signal(signal.SIGTERM,request_termination)
             buffer=b''
             discarding=False
             checked_at=0.0
             os.set_blocking(process.stdout.fileno(),False)
             while True:
                 try:
+                    if termination_requested:
+                        stop()
                     expired=watch.expired(time.monotonic())
                     if stop_at is None and expired:
                         emit(expired)
@@ -337,6 +553,11 @@ def controlled_session(command,owner_uid,*,events=None):
                         if not network_setup.verify_during_session():
                             events.add('dns_repaired')
                         checked_at=time.monotonic()
+                    with health_lock:
+                        if stop_at is None:
+                            for code, updates in dns_watch.poll(time.monotonic()):
+                                details_update(events, updates)
+                                emit(code)
                     if stop_at is not None and time.monotonic()-stop_at>10 and process.poll() is None:
                         signal.pidfd_send_signal(pidfd,signal.SIGKILL)
                     if select.select([process.stdout],[],[],.25)[0]:
@@ -367,6 +588,7 @@ def controlled_session(command,owner_uid,*,events=None):
                 except KeyboardInterrupt:
                     stop()
             result=process.wait()
+            details_update(events,dns_watch.observe('stopping'))
             events.add('stopped' if result==0 or stop_at is not None else 'process_failed')
             print(session_channel.MESSAGES['stopped' if result==0 or stop_at is not None else 'process_failed'],flush=True)
             print('OpenVPN exit status: '+str(result),flush=True)
@@ -381,6 +603,8 @@ def controlled_session(command,owner_uid,*,events=None):
         print('VPN stopped after a session or network-policy verification failure. Keep the guard enabled.',flush=True)
         return 1
     finally:
+        with health_lock:
+            events.set_details(dns_watch.observe('stopping'))
         signal.signal(signal.SIGTERM,previous_handler)
         if process is not None:
             if process.poll() is None:

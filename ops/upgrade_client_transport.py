@@ -24,8 +24,10 @@ EXACT = {'/usr/local/bin/vpn-desk', '/usr/local/share/applications/vpn-desk.desk
 OLD_SHA256 = 'fa6137221cd9638e0e55db4356598457bfb13e2883b0544c669b47ca2ca2f96b'
 LEGACY = {
     'vpn_session_helper.py': {'fa6137221cd9638e0e55db4356598457bfb13e2883b0544c669b47ca2ca2f96b',
-                              'f2ca82581f2ae80900a94909f3172ae998bda0352b01fa8a62f1d44971df5044'},
-    'session_channel.py': {'0f32f5050602f5a79a9f77a6837fc8f4bb9a9b8b7951b67b76bd9ceb4dd567b6'},
+                              'f2ca82581f2ae80900a94909f3172ae998bda0352b01fa8a62f1d44971df5044',
+                              '0ab9f832632d035a5f6d393458931c8741c0e6b833ad27daba74a1b7199b0fad'},
+    'session_channel.py': {'0f32f5050602f5a79a9f77a6837fc8f4bb9a9b8b7951b67b76bd9ceb4dd567b6',
+                           'd3981174df69eb01f1bc96606aa8eac0faa3a014340fc1c8123f0df58f3f8cb6'},
     'session_ui.py': {'7fa19a51db92c708a1c321370bbfc6efa0cc94615a3a87d6b07be47148a2918a'},
     'portal_helper.py': {'e401522faad3638eff1f9d6d2874e26a7c749713e34a2fb0fe3b0c78429e17ef'},
     'app.py': {'d0433e0f3f06edefb84e334183af599df79c13c17e6ab08ab025518397436b84'},
