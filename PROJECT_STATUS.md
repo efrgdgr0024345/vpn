@@ -1,23 +1,40 @@
 # Project history and current status
 
-## Current Kali update preparation
+## Physical Kali acceptance — 30 October 2026
 
-The owner confirms that the previous update was not installed and requests one
-automated diagnostic attempt with saved test credentials and useful shareable
-output. The new checked update continues to support the original installation.
-AUTOMATED_CLIENT_TEST.md describes the root-only local credential store, bounded
-one-attempt checks and explicitly requested return to ordinary networking. This
-does not embed passwords in the public project or change normal Connect's
-authentication/guard behavior. Physical Kali acceptance remains pending.
+The owner supplied a successful physical-client diagnostic report for source
+`1aa0c4a4eee9cee49235536fa92e0f8de3eafb1a`, from 06:56:59 to 06:57:15 UTC.
+The checked update ran directly from the original installation, refreshed the
+confirmed DHCP policy and imported the current login into the protected local
+test file. Kali kernel `7.1.5+kali-amd64`, OpenVPN `2.7.8` and OpenSSL `3.6.5`
+then established the tunnel in 593 ms, verified the server certificate, and
+negotiated TLS 1.3 and AES-256-GCM data encryption. Private UDP/TCP DNS and
+certificate-verified HTTPS succeeded; both HTTPS probes returned 200.
 
-The owner supplied fresh local evidence: kernel `7.1.5+kali-amd64`, OpenVPN
-`2.7.8`/OpenSSL `3.6.5`, and helper hash `fa613722...` matching the original
-installed code. The logging/IPv4 changes had not reached that laptop. Its
-explicit current DHCP server is `10.183.127.15`; normal DNS and the physical
-IPv4 route are present. An updated bundle now selects the userspace OpenVPN
-path for comparison and supports a narrow, independently lease-verified DHCP
-policy/candidate refresh. It does not identify DCO as the cause or install
-itself on Kali. Physical acceptance remains pending the checked update.
+The first OS resolver lookup timed out, while the second succeeded. The helper
+recorded a resolver repair at 3409 ms. This is consistent with another network
+manager rewriting the resolver during startup; the report alone does not identify
+the writer. `dns_file_verified: false` was sampled at tunnel initialization and
+was not refreshed after the repair. Record a small next-release improvement to
+refresh that sampled detail and publish repairs through the normal event path;
+this successful run does not require another immediate laptop update.
+
+The diagnostic returned success/exit 0, stopped its owned session and confirmed
+that the guard and saved state were removed and the original routes and DNS
+restored. This test intentionally ends disconnected. The address/credential-free
+summary is in `deployments/kali/client-acceptance.json`; the original uploaded
+report is not published. This is owner-supplied evidence from one short session,
+not a browser, leak, long-running, physical handoff or host-wide IPv6 acceptance
+test. It does not establish the cause of the original DNS failure or prove a DCO
+fault. Normal GUI Connect still uses terminal authentication.
+
+Read-only post-test server diagnosis
+[41017280489](https://github.com/efrgdgr0024345/vpn/actions/runs/41017280489)
+at 06:59:30 UTC confirmed OpenVPN, broker and Unbound active with zero restarts,
+a working local private resolver and an empty forwarding lease. The latter is
+expected after the diagnostic disconnected. The exact tested source passed all
+five functional jobs and security analysis before the private file export was
+opened. AUTOMATED_CLIENT_TEST.md documents the diagnostic and recovery boundary.
 
 ## External client acceptance — 30 October 2026
 

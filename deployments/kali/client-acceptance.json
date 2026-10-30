@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "evidence_type": "owner_supplied_physical_client_report",
+  "tested_source_revision": "1aa0c4a4eee9cee49235536fa92e0f8de3eafb1a",
+  "started_utc": "2026-10-30T06:56:59+00:00",
+  "finished_utc": "2026-10-30T06:57:15+00:00",
+  "kernel": "7.1.5+kali-amd64",
+  "openvpn_version": "2.7.8",
+  "openssl_version": "3.6.5",
+  "transport": "udp4",
+  "tls_version": "TLSv1.3",
+  "control_cipher": "TLS_AES_256_GCM_SHA384",
+  "data_cipher": "AES-256-GCM",
+  "outcome": "success",
+  "child_exit_status": 0,
+  "test_login_imported": true,
+  "peer_certificate_verified": true,
+  "tunnel_ready_elapsed_ms": 593,
+  "resolver_repair_elapsed_ms": 3409,
+  "initial_dns_configuration_snapshot": false,
+  "checks": [
+    {
+      "elapsed_ms": 1772,
+      "tunnel_route_verified": true,
+      "private_dns": "ok",
+      "private_dns_tcp": "ok",
+      "system_dns": "timeout",
+      "https": "ok",
+      "http_status": 200
+    },
+    {
+      "elapsed_ms": 10816,
+      "tunnel_route_verified": true,
+      "private_dns": "ok",
+      "private_dns_tcp": "ok",
+      "system_dns": "ok",
+      "https": "ok",
+      "http_status": 200
+    }
+  ],
+  "recovery": {
+    "child_stopped": true,
+    "confirmed": true,
+    "dns_match": true,
+    "guard_absent": true,
+    "ownership_proven": true,
+    "restore_attempted": true,
+    "restore_withheld": "none",
+    "restored": true,
+    "routes_match": true,
+    "state_absent": true
+  },
+  "limitations": [
+    "one_short_physical_session",
+    "initial_system_resolver_timeout_then_success",
+    "dns_configuration_detail_captured_before_repair",
+    "no_browser_ui_or_leak_test",
+    "no_long_running_or_physical_handoff_acceptance",
+    "host_wide_ipv6_disablement_not_confirmed",
+    "original_dns_failure_root_cause_not_established"
+  ],
+  "public_network_addresses_included": false,
+  "credential_contents_included": false,
+  "post_test_server_diagnostics": {
+    "workflow_run": 41017280489,
+    "server_utc": "2026-10-30T06:59:30+00:00",
+    "vpn_broker_resolver_active": true,
+    "service_restarts": 0,
+    "private_dns_status": "ok",
+    "private_dns_answers": 2,
+    "forwarding_lease_empty_after_disconnect": true
+  }
+}
