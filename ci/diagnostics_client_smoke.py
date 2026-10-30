@@ -24,9 +24,13 @@ PHASE = 'namespace preparation'
 
 
 def command(argv, *, timeout=15):
-    return subprocess.run(argv, check=True, stdin=subprocess.DEVNULL,
-                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                          text=True, timeout=timeout).stdout
+    try:
+        return subprocess.run(argv, check=True, stdin=subprocess.DEVNULL,
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                              text=True, timeout=timeout).stdout
+    except subprocess.CalledProcessError:
+        # Never expose arbitrary argv, environment, stderr or private inputs.
+        raise RuntimeError('Diagnostics fixture command failed during '+PHASE+'.') from None
 
 
 def disposable():
@@ -59,6 +63,7 @@ def firewall_signature():
 
 def run(endpoint):
     """Run only while the disposable server and fake public peers are active."""
+    global PHASE
     disposable()
     before_resolver = Path('/etc/resolv.conf').read_bytes()
     before_routes = command(['/usr/sbin/ip', '-j', '-4', 'route', 'show', 'table', 'all'])
@@ -74,9 +79,12 @@ def run(endpoint):
         if receive(process, timeout=30) != 'client namespace ready':
             raise RuntimeError('The isolated diagnostics client did not prepare.')
         # The unshare parent and its PID-namespace child share this fresh netns.
+        PHASE = 'veth creation'
         command(['/usr/sbin/ip', 'link', 'add', PEER, 'type', 'veth', 'peer', 'name', 'wlan0'])
         linked = True
+        PHASE = 'namespace interface transfer'
         command(['/usr/sbin/ip', 'link', 'set', 'wlan0', 'netns', str(process.pid)])
+        PHASE = 'veth configuration'
         command(['/usr/sbin/ip', 'address', 'add', GATEWAY+'/24', 'dev', PEER])
         command(['/usr/sbin/ip', 'link', 'set', PEER, 'up'])
         process.stdin.write('start\n')
@@ -100,7 +108,11 @@ def run(endpoint):
         process.stdin.close()
         process.stdout.close()
         if linked:
-            command(['/usr/sbin/ip', 'link', 'delete', PEER])
+            # Exiting the fresh namespace normally deletes both veth ends. Do
+            # not turn successful teardown into an error or mask a prior one.
+            links = json.loads(command(['/usr/sbin/ip', '-j', 'link', 'show']))
+            if any(item.get('ifname') == PEER for item in links):
+                command(['/usr/sbin/ip', 'link', 'delete', PEER])
     if (Path('/etc/resolv.conf').read_bytes() != before_resolver
             or command(['/usr/sbin/ip', '-j', '-4', 'route', 'show', 'table', 'all']) != before_routes
             or firewall_signature() != before_firewall):
