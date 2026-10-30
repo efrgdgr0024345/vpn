@@ -20,7 +20,7 @@ def supervisor_with_real_openvpn():
     """Exercise the actual app supervisor against the isolated server.
 
     IPv6 automatic address generation is disabled on the pre-created client TUN;
-    the real engine must configure IPv4 and ignore the server's IPv6 pushes.
+    the real engine must configure an IPv4-only tunnel.
     Routes stay unmodified. Host-wide IPv6 disablement needs physical acceptance.
     The separate namespace check validates client firewall/DNS ownership; this
     fixture substitutes that check to preserve the server container's firewall.
@@ -59,7 +59,7 @@ def supervisor_with_real_openvpn():
                 ['/usr/sbin/ip','-j','address','show','dev','tun-app-test'],text=True,timeout=5))
             families={item['family'] for link in addresses for item in link.get('addr_info',[])}
             if 'inet' not in families or 'inet6' in families:
-                raise RuntimeError('The real client did not configure IPv4 while ignoring IPv6 server pushes.')
+                raise RuntimeError('The real client did not configure an IPv4-only tunnel.')
             if (snapshot['details'].get('server_port')!=1194 or snapshot['details'].get('protocol')!='udp4'
                     or not snapshot['details'].get('tunnel_ipv4')
                     or snapshot['details'].get('tls_version')!='TLSv1.3'):
@@ -86,7 +86,7 @@ def supervisor_with_real_openvpn():
                     os.killpg(process.pid,signal.SIGKILL)
                     process.wait(timeout=5)
             subprocess.run(['/usr/sbin/ip','tuntap','del','dev','tun-app-test','mode','tun'],check=True,timeout=5)
-    print('PASS: app supervisor over real TLS/PAM, IPv4-only tunnel addressing despite IPv6 server pushes, private status and scoped Disconnect.',flush=True)
+    print('PASS: app supervisor over real TLS/PAM, IPv4-only tunnel addressing, private status and scoped Disconnect.',flush=True)
 
 
 def timeout_without_server():

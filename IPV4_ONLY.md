@@ -6,13 +6,37 @@ The owner requires IPv6 disabled on the VPN server and persistently blocked on
 Kali, including before connection and after reboot. This is separate from the
 broader server lockdown and boot-image work currently deferred.
 
-This requirement is not yet fully deployed. The successful physical Kali report
-still has `ipv6_kernel_disabled: false`. The installed client selects IPv4 and
-its active guard blocks IPv6, while the deployed server denies IPv6 forwarding
-but still configures IPv6 tunnel addresses/pushes. Neither establishes complete
-host-wide IPv6 disablement. The Kali configuration below is prepared guidance;
-the server additionally needs a reviewed IPv4-only configuration migration and
-verification. Do not report either machine as fully disabled without live checks.
+The repository now includes a narrow server migration and a standalone Kali
+setup. Deployment is not established by these source changes: live server
+migration/reboot and the owner's Kali apply/reboot checks are separate evidence.
+The last physical Kali report still has `ipv6_kernel_disabled: false`.
+
+The fixed GitHub Actions operation `enable-ipv4-only` accepts only the recognized
+lab configuration, refuses an active forwarding lease and preserves VPN
+credentials, PKI and unrelated live firewall rules. It removes the legacy IPv6
+tunnel settings, inserts first-position IPv6 drops in input/forward/output,
+updates the known packet self-test, applies interface sysctls, and adds the
+`ipv6.disable=1` GRUB argument. It does not reboot automatically. The existing
+`reboot-lab` operation activates that boot argument; `ipv4-only-status` verifies
+both the running kernel state and service health afterward. All mutations are
+gated on functional and security CI for the exact commit.
+
+## Reviewed Kali setup
+
+`ops/disable_client_ipv6.py` is a standalone system-Python setup. Run only the
+reviewed, independently SHA256-checked source with `sudo /usr/bin/python3 -I -B`.
+It requires the already tested protected IPv4-capable VPN Desk helper, an
+ordinary IPv4 route and no active VPN, guard or saved networking state. It
+preserves conflicting configuration files, the existing GRUB command line, VPN
+profiles, credentials, DNS and firewall rules. It installs only the two fixed
+configuration files below, runs `update-grub`, applies the interface settings,
+and reports whether a reboot is required. It does not reboot the laptop.
+
+After a normal reboot, run the same verified script with `--check`. Completion
+requires `kernel_ipv6_disabled: true`, `boot_parameter_active: true`,
+`persistence_installed: true`, `ipv6_address_count: 0`, and
+`reboot_required: false`. Files present before reboot are not proof that the
+running kernel has IPv6 disabled. Save the command offline before rebooting.
 
 ## Prepared Kali configuration
 

@@ -452,6 +452,60 @@ class ConnectionTests(unittest.TestCase):
         self.assertNotIn('PRIVATE', str(error.exception))
         self.assertNotIn('192.0.2.10', str(error.exception))
 
+    def ipv4_report(self, operation):
+        report = dict.fromkeys(lab.IPV4_REPORT_FIELDS, True)
+        report.update(version=1, operation=operation, credential_contents_returned=False,
+                      reboot_required=False)
+        return report
+
+    def ipv4_operation(self, operation, report):
+        calls = []
+        def run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            return self.result() if argv[0].endswith('ssh-keyscan') else self.result(json.dumps(report))
+        lab.execute(operation, {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY,
+                               'GITHUB_ACTIONS': 'true'}, run)
+        return calls
+
+    def test_ipv4_operations_use_fixed_sources_and_strict_reports(self):
+        for operation in ('ipv4-only-status', 'enable-ipv4-only'):
+            with self.subTest(operation=operation):
+                report = self.ipv4_report(operation)
+                output = io.StringIO()
+                with patch('sys.stdout', output):
+                    calls = self.ipv4_operation(operation, report)
+                argv, options = calls[-1]
+                self.assertEqual(argv[-1], '/usr/bin/python3 -I -B -')
+                self.assertTrue(options['input'].startswith('IPV4_ONLY_OPERATION = '+repr(operation)+'\n'))
+                self.assertTrue(options['input'].endswith((ROOT/'ops/enable_ipv4_only.py').read_text()))
+                self.assertEqual('SELFTEST_SOURCE = ' in options['input'], operation == 'enable-ipv4-only')
+                self.assertEqual(options['timeout'], 300 if operation == 'enable-ipv4-only' else 65)
+                notice = next(line for line in output.getvalue().splitlines()
+                              if line.startswith('::notice title=VPN lab '+operation+'::'))
+                self.assertEqual(json.loads(unquote(notice.split('::', 2)[2])), report)
+                self.assertNotIn('PRIVATE', output.getvalue())
+
+    def test_ipv4_reports_reject_untyped_unknown_and_wrong_operation_values(self):
+        base = self.ipv4_report('ipv4-only-status')
+        reports = [{**base, 'raw': 'PRIVATE DATA'},
+                   {**base, 'kernel_ipv6_disabled': 'PRIVATE DATA'},
+                   {**base, 'version': True},
+                   {**base, 'operation': 'enable-ipv4-only'},
+                   {**base, 'credential_contents_returned': True}]
+        for report in reports:
+            output = io.StringIO()
+            with self.subTest(report=report), patch('sys.stdout', output), self.assertRaises(lab.LabError):
+                self.ipv4_operation('ipv4-only-status', report)
+            self.assertNotIn('PRIVATE DATA', output.getvalue())
+            self.assertNotIn('::notice', output.getvalue())
+
+    def test_ipv4_migration_requires_build_gate_but_status_is_read_only(self):
+        workflow = (ROOT/'.github/workflows/lab-admin.yml').read_text()
+        gate = next(line for line in workflow.splitlines()
+                    if "if: inputs.operation == 'install-foundation'" in line)
+        self.assertIn("inputs.operation == 'enable-ipv4-only'", gate)
+        self.assertNotIn('ipv4-only-status', gate)
+
     def test_check_report_preserves_literal_percent_sequences_without_publishing_key(self):
         report = {**REPORT, 'running_service_units': ['example%0Aservice.service']}
         def run(argv, **kwargs):

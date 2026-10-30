@@ -61,6 +61,57 @@ def private_counter():
     raise TestFailure('Private-network firewall rule is missing.')
 
 
+def verify_ipv6_firewall_drop_rules(objects):
+    """Require an unconditional IPv6 drop before any accept in each base chain.
+
+    This is configuration readback, not a claim about a successful IPv6 packet
+    probe: a disabled IPv6 kernel may discard packets before netfilter sees them.
+    """
+    for name in ('input', 'forward', 'output'):
+        chains=[item['chain'] for item in objects if 'chain' in item
+                and item['chain'].get('family')=='inet'
+                and item['chain'].get('table')=='vpn_lab'
+                and item['chain'].get('name')==name]
+        if (len(chains)!=1 or chains[0].get('type')!='filter'
+                or chains[0].get('hook')!=name or chains[0].get('prio')!=0):
+            raise TestFailure('IPv6 firewall coverage has an unexpected base chain.')
+        rules=[item['rule'] for item in objects if 'rule' in item
+               and item['rule'].get('family')=='inet'
+               and item['rule'].get('table')=='vpn_lab'
+               and item['rule'].get('chain')==name]
+        if not rules:
+            raise TestFailure('An IPv6 firewall drop rule is missing.')
+        rule=rules[0]
+        expressions=rule.get('expr',[])
+        expected={'match':{'op':'==','left':{'meta':{'key':'nfproto'}},'right':'ipv6'}}
+        if (rule.get('comment')!='vpn-lab-block-ipv6-'+name or len(expressions)!=3
+                or expressions[0]!=expected or expressions[2]!={'drop':None}
+                or set(expressions[1])!={'counter'}):
+            raise TestFailure('An IPv6 firewall drop can be bypassed or is unrecognized.')
+        counter=expressions[1]['counter']
+        if (not isinstance(counter,dict) or set(counter)!={'packets','bytes'}
+                or any(type(value) is not int or value<0 for value in counter.values())):
+            raise TestFailure('An IPv6 firewall counter is unrecognized.')
+
+
+def verify_ipv4_only_tunnel(configuration,client_log,addresses):
+    lines=[line.strip() for line in configuration.splitlines()
+           if line.strip() and not line.lstrip().startswith(('#',';'))]
+    if (any('ipv6' in line.lower() for line in lines)
+            or any(lines.count(line)!=1 for line in
+                   ('proto udp4','dev tun-lab','server 172.27.240.0 255.255.255.0'))):
+        raise TestFailure('The server tunnel configuration is not IPv4-only.')
+    replies=re.findall(r'PUSH_REPLY,[^\r\n\']*',client_log)
+    if not replies or any('ipv6' in reply.lower() for reply in replies):
+        raise TestFailure('IPv4-only server options were not observed in the handshake.')
+    if (len(addresses)!=1 or addresses[0].get('ifname')!='tun-lab'
+            or not addresses[0].get('addr_info')
+            or any(address.get('family')!='inet' for address in addresses[0]['addr_info'])
+            or not any(address.get('local')=='172.27.240.1'
+                       and address.get('prefixlen')==24 for address in addresses[0]['addr_info'])):
+        raise TestFailure('The live server tunnel has unexpected address families.')
+
+
 def read_private(path):
     fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
     with os.fdopen(fd,'r') as stream:
@@ -304,23 +355,11 @@ def test(broker_pid=None):
                     time.sleep(0.1)
                 if private_counter()<=before:
                     raise TestFailure('Metadata/private-network packet filtering was not observed.')
-                ipv6=re.search(r'ifconfig-ipv6 ([0-9a-f:]+)/64',text,re.I)
-                if not ipv6:
-                    raise TestFailure('IPv6 confinement options were not received.')
-                channel.send(dns_packet(ipv6.group(1),'2001:db8::53',35002,2345,True))
-                blocked=False
-                end=time.monotonic()+3
-                while time.monotonic()<end:
-                    try:
-                        reply,address=channel.recvfrom(4096)
-                    except socket.timeout:
-                        continue
-                    if (address[2]!=socket.PACKET_OUTGOING and len(reply)>=41
-                            and reply[0]>>4==6 and reply[6]==58 and reply[40]==1):
-                        blocked=True
-                        break
-                if not blocked:
-                    raise TestFailure('Client IPv6 block response was not observed.')
+                configuration=read_private('/etc/openvpn/server/vpn-lab.conf')
+                addresses=json.loads(command(['/usr/sbin/ip','-j','address','show','dev','tun-lab']))
+                verify_ipv4_only_tunnel(configuration,text,addresses)
+                objects=json.loads(command(['/usr/sbin/nft','-j','list','ruleset']))['nftables']
+                verify_ipv6_firewall_drop_rules(objects)
                 second,secondlog=start('lab-second',values[1],'iphone')
                 if initialized(second,secondlog,6):
                     raise TestFailure('A second simultaneous client was accepted.')
@@ -413,7 +452,8 @@ def test(broker_pid=None):
             return {'correct_credentials_connect':True,'wrong_password_rejected':True,
                     'ipv4_dns_roundtrip_through_vpn_and_nat':True,
                     'metadata_private_network_packet_dropped':True,
-                    'client_ipv6_block_response_observed':True,
+                    'ipv4_only_tunnel_verified':True,
+                    'ipv6_firewall_drop_rules_verified':True,
                     'second_connection_rejected_without_displacing_first':True,
                     'unapproved_device_rejected':True,'session_token_reauthentication':True,
                     'kernel_lease_expires_when_broker_frozen':True,

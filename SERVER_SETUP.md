@@ -18,6 +18,8 @@ disruptive live packet self-test.
 | Operation | Effect |
 | --- | --- |
 | `inventory` | Approved read-only OS, ports, services and firewall summary. |
+| `ipv4-only-status` | Read current tunnel, firewall, interface and kernel IPv6-disablement status without changing configuration. |
+| `enable-ipv4-only` | Narrow migration of the existing lab to IPv4, preserving certificates, credentials and unrelated live rules. Requires an idle VPN and matching CI. A separate server reboot is required for the kernel argument. |
 | `install-foundation` | Install/update required Debian packages; retire old self-hosted runner services; provision credentials and PKI; apply the dedicated default-drop firewall; persist and start the VPN, broker and private recursive DNS services. |
 | `test-foundation` | Use protected local credentials to test the real running VPN. Credentials stay on the server. No desktop/client installation is performed. |
 | `probe-udp` | Confirm runner-originated UDP 1194 packets reach the external interface, using a random nonce and a short-lived packet listener. |
@@ -51,8 +53,10 @@ The deployed source commit is recorded in `/etc/openvpn/lab/state.json`.
   VPN transport remain available on the external interface, with loopback,
   established replies, DHCP and ICMP exceptions. VPN forwarding permits public
   IPv4 internet traffic through NAT and blocks private/reserved networks and
-  cloud metadata. IPv6 forwarding is denied, with client IPv6 blocking pushed
-  through the VPN. The host's own outbound package/management traffic is allowed.
+  cloud metadata. The current generator uses IPv4-only tunnel settings and early
+  IPv6 drops in input, forwarding and output. Existing deployments need the narrow
+  migration above; see IPV4_ONLY.md for actual deployment and reboot status.
+  The host's own outbound IPv4 package/management traffic is allowed.
 - The private Unbound resolver binds only to the VPN address. Authorized VPN
   clients can query UDP/TCP 53; no public recursive listener is opened. Production
   resolves recursively using distribution DNS root trust data, with no public
@@ -116,8 +120,10 @@ the profile and credentials.
 
 `server_selftest.py` checks a wrong password is rejected, correct credentials
 connect, actual DNS packets traverse the encrypted tunnel and IPv4 NAT, cloud
-metadata/private packets hit the drop rule, IPv6 generates a client block
-response, and a different enrolled device does not displace the active session.
+metadata/private packets hit the drop rule, IPv6 tunnel configuration is absent,
+early IPv6 drop rules cover all three base chains, and a different enrolled device
+does not displace the active session. These configuration checks are not an
+external IPv6 leak test or proof the kernel boot parameter is active.
 It also tests unapproved pins, actual token reauthentication, old-token replay,
 a frozen broker's kernel timeout, ownership transfer and device revocation.
 

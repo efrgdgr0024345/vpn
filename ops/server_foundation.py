@@ -125,6 +125,7 @@ table inet vpn_lab {{
  set authorized {{ type ipv4_addr; flags timeout; timeout 20s; size 1; }}
  chain input {{
   type filter hook input priority 0; policy drop;
+  meta nfproto ipv6 counter drop comment "vpn-lab-block-ipv6-input"
   iifname "lo" accept
   iifname "tun-lab" ip saddr @authorized ip daddr 172.27.240.1 udp dport 53 counter accept comment "vpn-lab-private-dns"
   iifname "tun-lab" ip saddr @authorized ip daddr 172.27.240.1 tcp dport 53 counter accept
@@ -134,19 +135,21 @@ table inet vpn_lab {{
   iifname "{interface}" tcp dport {ssh_port} accept
   iifname "{interface}" udp dport 1194 accept
   iifname "{interface}" udp sport 67 udp dport 68 accept
-  iifname "{interface}" udp sport 547 udp dport 546 accept
   iifname "{interface}" ip protocol icmp accept
-  iifname "{interface}" meta l4proto ipv6-icmp accept
  }}
  chain forward {{
   type filter hook forward priority 0; policy drop;
+  meta nfproto ipv6 counter drop comment "vpn-lab-block-ipv6-forward"
   ct state invalid drop
   iifname "tun-lab" meta nfproto ipv6 counter drop comment "vpn-lab-block-ipv6"
   iifname "tun-lab" ip daddr @nonpublic counter drop comment "vpn-lab-block-private"
   iifname "tun-lab" oifname "{interface}" ip saddr @authorized ct state new,established,related counter accept
   iifname "{interface}" oifname "tun-lab" ip daddr @authorized ct state established,related counter accept
  }}
- chain output {{ type filter hook output priority 0; policy accept; }}
+ chain output {{
+  type filter hook output priority 0; policy accept;
+  meta nfproto ipv6 counter drop comment "vpn-lab-block-ipv6-output"
+ }}
 }}
 table ip vpn_lab_nat {{
  chain postrouting {{
@@ -165,7 +168,6 @@ proto udp4
 dev tun-lab
 topology subnet
 server 172.27.240.0 255.255.255.0
-server-ipv6 fd47:27:240::/64
 ca {PKI}/ca.crt
 cert {PKI}/issued/VPNLabServer.crt
 key {PKI}/private/VPNLabServer.key
@@ -192,8 +194,7 @@ persist-key
 persist-tun
 user {TRANSPORT}
 group {TRANSPORT}
-push "redirect-gateway def1 ipv6"
-push "block-ipv6"
+push "redirect-gateway def1"
 push "dhcp-option DNS 172.27.240.1"
 push "explicit-exit-notify 1"
 verb 3
@@ -536,7 +537,9 @@ net.ipv4.conf.all.send_redirects=0
 net.ipv4.conf.default.send_redirects=0
 net.ipv4.conf.all.accept_source_route=0
 net.ipv4.conf.default.accept_source_route=0
-net.ipv6.conf.all.forwarding=0
+-net.ipv6.conf.all.forwarding=0
+-net.ipv6.conf.all.disable_ipv6=1
+-net.ipv6.conf.default.disable_ipv6=1
 ''',0o644)
             run(['/usr/sbin/sysctl','-p','/etc/sysctl.d/70-vpn-lab.conf'])
             write('/etc/systemd/system/openvpn-server@vpn-lab.service.d/hardening.conf','''[Unit]
@@ -556,7 +559,7 @@ ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
 RestrictNamespaces=yes
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
 LockPersonality=yes
 RestrictRealtime=yes
 LimitCORE=0

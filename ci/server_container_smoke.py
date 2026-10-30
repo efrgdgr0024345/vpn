@@ -22,6 +22,7 @@ import device_admin
 sys.path.insert(0,str(ROOT/'ci'))
 import client_control_smoke
 import diagnostics_client_smoke
+import ipv4_migration_smoke
 PHASE='preflight'
 
 
@@ -97,6 +98,40 @@ def main():
                 time.sleep(.1)
             else:
                 raise RuntimeError('OpenVPN server initialization timed out.')
+            PHASE='legacy IPv4-only policy migration'
+            real_migration_run=foundation.run
+            def migration_lifecycle(argv,**kwargs):
+                nonlocal server,broker
+                if argv==['/usr/bin/systemctl','stop','openvpn-server@vpn-lab.service','vpn-lab-broker.service']:
+                    for process in (broker,server):
+                        if process.poll() is None:
+                            try:
+                                os.killpg(process.pid,signal.SIGTERM)
+                            except ProcessLookupError:
+                                process.poll()
+                            process.wait(timeout=10)
+                    return ''
+                if argv==['/usr/bin/systemctl','start','vpn-lab-broker.service','openvpn-server@vpn-lab.service']:
+                    completed=log.read_text(errors='replace').count('Initialization Sequence Completed')
+                    server=subprocess.Popen(['/usr/sbin/openvpn','--config','/etc/openvpn/server/vpn-lab.conf'],
+                        stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+                    broker=subprocess.Popen(['/usr/bin/python3','-I','-B','/test/ops/session_broker.py'],
+                        stdout=output,stderr=subprocess.STDOUT,start_new_session=True)
+                    end=time.monotonic()+15
+                    while time.monotonic()<end:
+                        if server.poll() is not None or broker.poll() is not None:
+                            raise RuntimeError('An actual migrated VPN daemon failed to start.')
+                        if log.read_text(errors='replace').count('Initialization Sequence Completed')>completed:
+                            return ''
+                        time.sleep(.1)
+                    raise RuntimeError('The migrated VPN daemon did not become ready.')
+                if len(argv)==5 and argv[:4]==['/usr/bin/systemctl','show','--property=ActiveState','--value']:
+                    service={'openvpn-server@vpn-lab.service':server,'vpn-lab-broker.service':broker,
+                             'unbound.service':resolver}.get(argv[-1])
+                    if service is not None:
+                        return 'active\n' if service.poll() is None else 'inactive\n'
+                return real_migration_run(argv,**kwargs)
+            ipv4_migration_smoke.run(migration_lifecycle)
             PHASE='read-only private DNS diagnostics'
             end=time.monotonic()+10
             while True:

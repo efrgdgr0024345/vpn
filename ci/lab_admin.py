@@ -22,6 +22,7 @@ from server_diagnostics import validate_report as validate_connection_report
 from prepare_test_access import validate_report as validate_test_access_report
 from inspect_test_peer import validate_report as validate_test_peer_report
 from external_vpn_test import validate_report as validate_external_test_report
+from enable_ipv4_only import validate_report as validate_ipv4_only_report, REPORT_FIELDS as IPV4_REPORT_FIELDS
 
 ENVIRONMENT = {'PATH': '/usr/bin:/bin:/usr/sbin', 'LC_ALL': 'C'}
 
@@ -176,7 +177,8 @@ def private_file(path, contents):
 def execute(operation, environment, run=bounded_run):
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     if operation not in ('connectivity', 'inventory', 'diagnose-connection', 'prepare-test-access', 'inspect-test-peer', 'test-from-peer', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download',
-                         'device-status','revoke-device','enable-device','reset-sessions','reboot-lab','rotate-password'):
+                         'device-status','revoke-device','enable-device','reset-sessions','reboot-lab','rotate-password',
+                         'enable-ipv4-only','ipv4-only-status'):
         raise LabError('Unsupported lab operation.')
     host, port, fingerprint = settings(environment)
     peer = None
@@ -197,6 +199,13 @@ def execute(operation, environment, run=bounded_run):
         raise LabError('Select a fixed registered device name.')
     if operation == 'diagnose-connection':
         program = (ROOT/'ops/server_diagnostics.py').read_text()
+    if operation in ('enable-ipv4-only', 'ipv4-only-status'):
+        program = 'IPV4_ONLY_OPERATION = ' + repr(operation) + '\n'
+        if operation == 'enable-ipv4-only':
+            program += ('SELFTEST_SOURCE = ' + repr((ROOT/'ops/server_selftest.py').read_text()) + '\n'
+                        + "SELFTEST_PREVIOUS_SHA256 = '5ac77ccac88165e4ffc3714c2b0cb0719ad58f307a532e2430831a8c6c38f412'\n")
+            timeout = 300
+        program += (ROOT/'ops/enable_ipv4_only.py').read_text()
     if operation == 'prepare-test-access':
         program = (ROOT/'ops/prepare_test_access.py').read_text()
     if operation == 'inspect-test-peer':
@@ -333,7 +342,8 @@ def execute(operation, environment, run=bounded_run):
         elif operation=='test-foundation':
             expected={'correct_credentials_connect','wrong_password_rejected',
                       'ipv4_dns_roundtrip_through_vpn_and_nat','metadata_private_network_packet_dropped',
-                      'client_ipv6_block_response_observed','second_connection_rejected_without_displacing_first',
+                      'ipv4_only_tunnel_verified','ipv6_firewall_drop_rules_verified',
+                      'second_connection_rejected_without_displacing_first',
                       'unapproved_device_rejected','session_token_reauthentication',
                       'kernel_lease_expires_when_broker_frozen','ownership_transfers_between_devices',
                       'device_revocation_denies_forwarding',
@@ -353,6 +363,8 @@ def execute(operation, environment, run=bounded_run):
             expected={'devices','session_reset','reboot_scheduled','credential_contents_returned'}
         elif operation=='rotate-password':
             expected={'password_rotated','sessions_invalidated','old_download_closed','credential_contents_returned'}
+        elif operation in ('enable-ipv4-only', 'ipv4-only-status'):
+            expected = IPV4_REPORT_FIELDS
         if not isinstance(report, dict) or set(report) != expected:
             raise LabError('Inventory returned unexpected fields; raw output withheld.')
         if operation == 'diagnose-connection':
@@ -375,6 +387,13 @@ def execute(operation, environment, run=bounded_run):
                 validate_external_test_report(report)
             except ValueError:
                 raise LabError('External VPN test returned unsupported data; raw output withheld.') from None
+        if operation in ('enable-ipv4-only', 'ipv4-only-status'):
+            try:
+                validate_ipv4_only_report(report)
+                if report['operation'] != operation:
+                    raise ValueError('Operation mismatch.')
+            except ValueError:
+                raise LabError('IPv4-only operation returned unsupported data; raw output withheld.') from None
         if environment.get('GITHUB_ACTIONS') == 'true':
             # Checks annotations are available through api.github.com even when
             # signed log-download hosts cannot be reached by the controller.

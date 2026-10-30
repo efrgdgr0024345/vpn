@@ -20,7 +20,9 @@ peer=$(docker create --network "$network" --cap-add NET_ADMIN --cap-add SYS_ADMI
   --security-opt seccomp=unconfined --device-cgroup-rule 'c 10:200 rwm' "$image" sleep infinity)
 server=$(docker create --network "$network" --cap-add NET_ADMIN --cap-add SYS_ADMIN \
   --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
-  --device-cgroup-rule 'c 10:200 rwm' --sysctl net.ipv4.ip_forward=1 "$image" sleep infinity)
+  --device-cgroup-rule 'c 10:200 rwm' --sysctl net.ipv4.ip_forward=1 \
+  --sysctl net.ipv6.conf.all.disable_ipv6=1 \
+  --sysctl net.ipv6.conf.default.disable_ipv6=1 "$image" sleep infinity)
 docker start "$peer" "$server" >/dev/null
 docker exec "$peer" sh -c 'apt-get update -qq >/tmp/packages.log 2>&1 && apt-get install -y -qq --no-install-recommends python3 iproute2 openssh-server openssl ca-certificates >>/tmp/packages.log 2>&1 || { tail -30 /tmp/packages.log; exit 1; }'
 docker exec "$peer" ip addr add 198.41.0.4/32 dev lo
@@ -41,6 +43,7 @@ docker exec "$peer" cat /usr/local/share/ca-certificates/vpn-peer-fixture.crt | 
 docker exec "$server" mkdir -p /test/ops /test/ci /test/vpn-dashboard
 docker cp ops/server_foundation.py "$server:/test/ops/server_foundation.py"
 docker cp ops/server_selftest.py "$server:/test/ops/server_selftest.py"
+docker cp ops/enable_ipv4_only.py "$server:/test/ops/enable_ipv4_only.py"
 docker cp ops/server_diagnostics.py "$server:/test/ops/server_diagnostics.py"
 docker cp ops/prepare_test_access.py "$server:/test/ops/prepare_test_access.py"
 docker cp ops/inspect_test_peer.py "$server:/test/ops/inspect_test_peer.py"
@@ -50,6 +53,7 @@ docker cp ops/session_broker.py "$server:/test/ops/session_broker.py"
 docker cp ops/device_admin.py "$server:/test/ops/device_admin.py"
 docker cp ops/client_diagnostics.py "$server:/test/ops/client_diagnostics.py"
 docker cp ci/server_container_smoke.py "$server:/test/ci/server_container_smoke.py"
+docker cp ci/ipv4_migration_smoke.py "$server:/test/ci/ipv4_migration_smoke.py"
 docker cp ci/client_control_smoke.py "$server:/test/ci/client_control_smoke.py"
 docker cp ci/diagnostics_client_smoke.py "$server:/test/ci/diagnostics_client_smoke.py"
 docker cp vpn-dashboard/. "$server:/test/vpn-dashboard/"
