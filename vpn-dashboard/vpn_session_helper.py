@@ -22,6 +22,8 @@ import portal_helper
 import safe_io
 from security import PROFILE, SERVICE_USER, load_policy, read_trusted, service_account, validate_profile
 
+TEST_LOGIN = Path('/etc/vpn-desk/testing-login.txt')
+
 
 def ipv4_options(protocol):
     if protocol not in ('udp', 'tcp-client'):
@@ -46,14 +48,33 @@ def userspace_options(executable):
     return ['--disable-dco'] if tuple(map(int, version.groups())) >= (2, 6) else []
 
 
-def openvpn_argv():
+def validate_testing_login():
+    try:
+        info = TEST_LOGIN.lstat()
+        if (info.st_uid != 0 or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) != 0o600):
+            raise portal_helper.Refused('Unsafe protected test login.')
+        value = read_trusted(TEST_LOGIN, private=True, limit=512)
+    except (OSError, UnicodeError, portal_helper.Refused):
+        raise portal_helper.Refused('The protected local test login is missing or unsafe.') from None
+    if re.fullmatch(r'vpn-lab-client\n[!-~]{20,256}\n', value) is None:
+        raise portal_helper.Refused('The protected local test login has an unsupported format.')
+
+
+def openvpn_argv(*, test_credentials=False):
+    if type(test_credentials) is not bool:
+        raise portal_helper.Refused('Expected a fixed local test-login mode.')
     policy = load_policy()
     validate_profile(read_trusted(PROFILE, private=True), policy)
     service_account()
     executable = next((p for p in ('/usr/sbin/openvpn', '/usr/bin/openvpn') if Path(p).is_file()), None)
     if not executable:
         raise portal_helper.Refused('OpenVPN is not installed.')
-    return ([executable, '--config', str(PROFILE), '--auth-user-pass', '--auth-nocache']
+    authentication = ['--auth-user-pass']
+    if test_credentials:
+        validate_testing_login()
+        authentication += [str(TEST_LOGIN), '--auth-retry', 'none']
+    return ([executable, '--config', str(PROFILE)] + authentication + ['--auth-nocache']
             + ipv4_options(policy['vpn_protocol']) + userspace_options(executable) + [
             '--mssfix', '1300', '--script-security', '1',
             '--verb', '3',
@@ -61,10 +82,10 @@ def openvpn_argv():
             '--group', SERVICE_USER, '--persist-key', '--persist-tun'])
 
 
-def prepare_session():
+def prepare_session(*, test_credentials=False):
     if os.geteuid() != 0:
         raise portal_helper.Refused('This session helper requires explicit terminal sudo.')
-    command = openvpn_argv()
+    command = openvpn_argv(test_credentials=test_credentials)
     portal_helper.check_network()
     network_setup.prepare()
     portal_helper.act('close')
@@ -429,7 +450,7 @@ class DNSHealthWatch:
         return updates
 
 
-def main(owner_uid):
+def main(owner_uid, *, test_credentials=False):
     events = None
     try:
         if os.geteuid() != 0:
@@ -450,7 +471,7 @@ def main(owner_uid):
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise portal_helper.Refused('Another VPN action or session is active; stop it before connecting.') from None
-            command = prepare_session()
+            command = prepare_session(test_credentials=test_credentials)
             print('OpenVPN data path: userspace compatibility mode.', flush=True)
             print('Portal verified closed. Starting OpenVPN; shared action lock held until exit.', flush=True)
             # One more check after firewall validation. External root network
@@ -460,7 +481,7 @@ def main(owner_uid):
             if isinstance(version, str):
                 for line in version.splitlines():
                     details_update(events, session_channel.parse_details(line))
-            return controlled_session(command,owner_uid,events=events)
+            return controlled_session(command,owner_uid,events=events,one_shot=test_credentials)
     except (portal_helper.Refused,session_channel.ChannelError, OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
         print('VPN NOT CONFIRMED: ' + (str(exc) if isinstance(exc, portal_helper.Refused)
                                       else 'Session verification or action lock failed. No automatic retry.'), flush=True)
@@ -472,14 +493,20 @@ def main(owner_uid):
         return 1
 
 
-def controlled_session(command,owner_uid,*,events=None):
+def controlled_session(command,owner_uid,*,events=None,one_shot=False):
     if type(owner_uid) is not int or owner_uid<=0:
         raise portal_helper.Refused('Start the app as your normal desktop user, then authenticate with sudo.')
+    if type(one_shot) is not bool:
+        raise portal_helper.Refused('Expected a fixed one-shot session mode.')
     if not hasattr(os,'pidfd_open') or not hasattr(signal,'pidfd_send_signal'):
         raise portal_helper.Refused('This controlled session requires Linux process-descriptor signaling.')
     events=events if events is not None else session_channel.Events()
     for code in ('guard_checked', 'dns_configured', 'credentials'):
-        print(session_channel.format_event(events.add(code)),flush=True)
+        row=events.add(code)
+        if one_shot and code == 'credentials':
+            print('Using the protected local test login; no credential prompt.',flush=True)
+        else:
+            print(session_channel.format_event(row),flush=True)
     process=None
     pidfd=None
     stop_at=None
@@ -510,6 +537,11 @@ def controlled_session(command,owner_uid,*,events=None):
         code=session_channel.classify(line)
         if code:
             emit(code)
+            if one_shot and code in ('reconnecting','auth_failed'):
+                if code == 'reconnecting':
+                    emit('network_failed')
+                    print('The one-shot diagnostic stops on reconnect; no authentication retry will be attempted.',flush=True)
+                stop()
     def stop():
         nonlocal stop_at
         # The IPC stop callback runs in a different thread. Serialize health
@@ -542,6 +574,7 @@ def controlled_session(command,owner_uid,*,events=None):
                 return 0
             process=subprocess.Popen(command,cwd='/',extra_groups=[],stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT,
+                                     stdin=subprocess.DEVNULL if one_shot else None,
                                      env={'PATH':'/usr/sbin:/usr/bin','LC_ALL':'C'})
             pidfd=os.pidfd_open(process.pid)
             if stop_at is not None:

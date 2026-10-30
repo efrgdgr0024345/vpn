@@ -96,6 +96,22 @@ def export_file(path,value,uid,gid):
         Path(temporary).unlink(missing_ok=True)
 
 
+def canonical_login(value):
+    """Validate credential shape without returning its contents in an error."""
+    if not isinstance(value,str) or len(value)>512 or not value.isascii():
+        raise server.SetupError('Protected VPN credentials are not ready.')
+    value=value.replace('\r\n','\n')
+    if '\r' in value:
+        raise server.SetupError('Protected VPN credentials are not ready.')
+    if value.endswith('\n'):
+        value=value[:-1]
+    lines=value.split('\n')
+    if (len(lines)!=2 or lines[0]!=server.CLIENT or not 1<=len(lines[1])<=256
+            or any(not 32<=ord(char)<=126 for char in lines[1])):
+        raise server.SetupError('Protected VPN credentials are not ready.')
+    return lines[0]+'\n'+lines[1]+'\n'
+
+
 def configure(value,configuration=Path('/etc/ssh/sshd_config'),reload_service=True,device='kali'):
     if os.geteuid()!=0:
         raise server.SetupError('Download enrollment requires local lab root.')
@@ -112,9 +128,11 @@ def configure(value,configuration=Path('/etc/ssh/sshd_config'),reload_service=Tr
         if not registry.get(device,{}).get('enabled'):
             raise server.SetupError('The selected device is disabled.')
     profile=server.read_owned(source/'client.ovpn')
-    login=server.read_owned(source/'login.txt')
-    if len(login.splitlines())!=2 or login.splitlines()[0]!=server.CLIENT:
-        raise server.SetupError('Protected VPN credentials are not ready.')
+    login=canonical_login(server.read_owned(source/'login.txt'))
+    if source!=server.EXPORT:
+        master=canonical_login(server.read_owned(server.EXPORT/'login.txt'))
+        if not secrets.compare_digest(login,master):
+            raise server.SetupError('Protected VPN credentials are not ready.')
     try:
         account=pwd.getpwnam(USER)
     except KeyError:

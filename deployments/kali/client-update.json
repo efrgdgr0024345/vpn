@@ -4,7 +4,7 @@
     "portal_helper.py": "96da266dc8f906aad8d5a3bfe2302156c5e855067f61917d4845b7209c9095be",
     "session_channel.py": "d4a386d14ec26728c618b8da8c0f8302a2783e7e32ba95a09e1252fc13aad7fe",
     "session_ui.py": "e812ee4fdee34c182026ec5959c293b3715e68a204f640adb40d7445238eabcf",
-    "vpn_session_helper.py": "2228727b79e5ffc3e1b335a071f5b84932f879c56077be7f237aeaf1052dd00a"
+    "vpn_session_helper.py": "8a168e37acd56d7ca4cfd51a553cab8bda4d5152707a250ffd180f5b24362052"
   },
   "version": 1
 }

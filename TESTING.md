@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 170 desktop and 153 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 175 desktop and 176 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
@@ -42,10 +42,19 @@ and ignores the unchanged server's IPv6 pushes. This verifies protocol handling;
 host-wide kernel/sysctl disablement still needs physical acceptance. Synthetic DNS
 is confined to that isolated harness; production uses the VPS's recursive resolver.
 
-The VPN server container receives explicit TUN/NET_ADMIN access. The external
-client fixture additionally receives SYS_ADMIN and a relaxed seccomp profile to
-create its private network namespace. Containers publish no host ports and mount
-no host credentials. Namespace/kernel tests fail if they
+The one-attempt diagnostic runner additionally runs against that real server in
+separate network, PID and mount namespaces. It uses the installed protected app,
+actual client guard and resolver changes, and synthetic trusted HTTPS without
+replacing the safety checks. Both a working credential and an intentionally wrong
+password must produce typed reports, stop the owned process and verify restoration.
+Saved credentials must remain root-only. The server's routes, resolver and
+firewall structure must remain unchanged.
+
+The VPN server container receives explicit TUN/NET_ADMIN/SYS_ADMIN access and
+relaxed seccomp/AppArmor profiles for this private client namespace fixture.
+The separate external client fixture also receives SYS_ADMIN and a relaxed
+seccomp profile for its private network namespace. Containers publish no host
+ports and mount no host credentials. Namespace/kernel tests fail if they
 cannot run rather than silently skipping validation.
 
 A separate Debian container, without added capabilities or host mounts, runs

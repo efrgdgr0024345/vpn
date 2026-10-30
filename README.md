@@ -29,6 +29,11 @@ runtime guard/resolver, local session events and public-code installation audit.
 It also provides read-only network diagnostics. The application is in
 [vpn-dashboard](vpn-dashboard/README.md).
 
+For the current connection investigation, [one-attempt client diagnostics](AUTOMATED_CLIENT_TEST.md)
+uses a root-only local test login, collects a bounded connection report and
+attempts the explicitly requested return to ordinary networking. It supports
+updating the original client installation directly.
+
 The hardened launcher accepts only an installed root-owned helper and the
 protected `/etc/vpn-desk/client.ovpn` profile. Home-directory profiles are no
 longer used. The all-application captive-portal bypass is disabled.

@@ -122,7 +122,7 @@ X11Forwarding no
     android=server_foundation.EXPORT/'devices/android'
     server_foundation.directory(android,0o700)
     server_foundation.write(android/'client.ovpn','android fixture profile\n')
-    server_foundation.write(android/'login.txt','vpn-lab-client\n'+'y'*43+'\n')
+    server_foundation.write(android/'login.txt',server_foundation.read_owned(server_foundation.EXPORT/'login.txt'))
     configure_download.configure(private.with_suffix('.pub').read_text(),configuration,False,device='android')
     os.kill(int(Path('/run/vpn-lab-test-sshd.pid').read_text()),1)
     time.sleep(.5)

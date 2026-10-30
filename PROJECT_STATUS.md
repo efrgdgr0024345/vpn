@@ -2,6 +2,14 @@
 
 ## Current Kali update preparation
 
+The owner confirms that the previous update was not installed and requests one
+automated diagnostic attempt with saved test credentials and useful shareable
+output. The new checked update continues to support the original installation.
+AUTOMATED_CLIENT_TEST.md describes the root-only local credential store, bounded
+one-attempt checks and explicitly requested return to ordinary networking. This
+does not embed passwords in the public project or change normal Connect's
+authentication/guard behavior. Physical Kali acceptance remains pending.
+
 The owner supplied fresh local evidence: kernel `7.1.5+kali-amd64`, OpenVPN
 `2.7.8`/OpenSSL `3.6.5`, and helper hash `fa613722...` matching the original
 installed code. The logging/IPv4 changes had not reached that laptop. Its

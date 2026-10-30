@@ -21,6 +21,7 @@ import external_vpn_test
 import device_admin
 sys.path.insert(0,str(ROOT/'ci'))
 import client_control_smoke
+import diagnostics_client_smoke
 PHASE='preflight'
 
 
@@ -132,6 +133,8 @@ def main():
             client_control_smoke.supervisor_with_real_openvpn()
             PHASE='no-reply client diagnostics'
             client_control_smoke.timeout_without_server()
+            PHASE='automated client diagnostics and restoration'
+            diagnostics_client_smoke.run(endpoint)
             PHASE='real password recovery'
             old_login=login.read_bytes()
             real_run=foundation.run
