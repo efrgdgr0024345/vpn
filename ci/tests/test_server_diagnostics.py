@@ -138,15 +138,30 @@ class DNSProbeTests(unittest.TestCase):
             else:
                 channel.recvfrom.return_value = reply
             with patch.object(diagnostics.socket, 'socket', return_value=channel) as factory, \
+                    patch.object(diagnostics.socket, 'if_nametoindex', return_value=1) as interface, \
                     patch.object(diagnostics.secrets, 'randbelow', return_value=1234):
                 value = diagnostics.probe_dns(diagnostics.parse_tunnel(json.dumps(tunnel())))
             self.assertEqual(value['status'], status)
             self.assertNotIn('PRIVATE', json.dumps(value))
             factory.assert_called_once_with(socket.AF_INET, socket.SOCK_DGRAM)
-            channel.setsockopt.assert_called_once_with(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b'lo\0')
+            interface.assert_called_once_with('lo')
+            channel.setsockopt.assert_called_once_with(socket.IPPROTO_IP, diagnostics.IP_UNICAST_IF, struct.pack('!I', 1))
             channel.bind.assert_called_once_with((diagnostics.DNS, 0))
             channel.connect.assert_called_once_with((diagnostics.DNS, 53))
             channel.settimeout.assert_called_once_with(3)
+
+    def test_unsupported_output_interface_option_stops_without_unrestricted_retry(self):
+        channel = MagicMock()
+        channel.__enter__.return_value = channel
+        channel.setsockopt.side_effect = OSError('PRIVATE')
+        with patch.object(diagnostics.socket, 'socket', return_value=channel) as factory, \
+                patch.object(diagnostics.socket, 'if_nametoindex', return_value=1):
+            value = diagnostics.probe_dns(diagnostics.parse_tunnel(json.dumps(tunnel())))
+        self.assertEqual(value['status'], 'transport_error')
+        self.assertNotIn('PRIVATE', json.dumps(value))
+        factory.assert_called_once()
+        channel.connect.assert_not_called()
+        channel.send.assert_not_called()
 
 
 class DiagnosticsSafetyTests(unittest.TestCase):

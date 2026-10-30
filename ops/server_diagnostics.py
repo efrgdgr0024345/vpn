@@ -28,6 +28,7 @@ DNS_STATUS = {'not_attempted', 'ok', 'timeout', 'servfail', 'refused', 'rcode_er
 TOP_KEYS = {'version', 'server_utc', 'ntp_synchronized', 'services', 'tunnel',
             'dns_listeners', 'authorization', 'input_counters', 'dns_probe'}
 DNS = '172.27.240.1'
+IP_UNICAST_IF = getattr(socket, 'IP_UNICAST_IF', 50)  # Linux IPv4 output-interface option.
 QUESTION = b'\x07example\x03com\x00'+struct.pack('!HH', 1, 1)
 ENVIRONMENT = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C'}
 
@@ -302,16 +303,18 @@ def parse_dns(packet, identifier):
 
 def probe_dns(tunnel):
     result = {'status': 'not_attempted', 'rcode': None, 'answer_count': None, 'elapsed_ms': 0}
-    # Verify this is a local server address, then bind to loopback as an
-    # additional boundary: a missing VPN interface must never route this test
-    # through the server's public/default interface.
+    # Verify this is a local server address, then restrict output to loopback:
+    # a missing VPN interface must never route this test through a public
+    # interface. SO_BINDTODEVICE(lo) also filters replies by receive device and
+    # incorrectly drops local replies associated with tun-lab's address.
     if (tunnel['present'] is not True or tunnel['up'] is not True
             or not any(ipaddress.IPv4Interface(value).ip == ipaddress.IPv4Address(DNS) for value in tunnel['ipv4'])):
         return result
     started = time.monotonic()
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as channel:
-            channel.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, b'lo\0')
+            channel.setsockopt(socket.IPPROTO_IP, IP_UNICAST_IF,
+                               struct.pack('!I', socket.if_nametoindex('lo')))
             channel.bind((DNS, 0))
             channel.settimeout(3)
             channel.connect((DNS, 53))

@@ -116,8 +116,8 @@ troubleshooting. It intentionally includes tunnel/DNS binding addresses and the
 authorized VPN source, plus a bounded `example.com` DNS result. Unknown nested
 fields, arbitrary service text and raw command errors are refused before output.
 It reads no profiles, credentials, journals or OpenVPN management socket. The
-DNS query binds to loopback and a verified local server tunnel address, never a
-public fallback. A successful local query alone does not test the remote client's
+DNS query restricts output to loopback and binds a verified local server tunnel
+address, never a public fallback. A successful local query alone does not test the remote client's
 path. Capture another report while the client is connected to inspect its lease
 and changes to the authorized-DNS/drop counters.
 
