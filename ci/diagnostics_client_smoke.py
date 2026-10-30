@@ -13,6 +13,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 
 
@@ -21,11 +22,13 @@ PEER = 'diag-peer'
 CLIENT_ADDRESS = '192.0.2.48'
 GATEWAY = '192.0.2.1'
 PHASE = 'namespace preparation'
+FIXTURE_RULE = 'vpn-lab-diagnostics-veth'
 
 
-def command(argv, *, timeout=15):
+def command(argv, *, timeout=15, data=None):
     try:
-        return subprocess.run(argv, check=True, stdin=subprocess.DEVNULL,
+        return subprocess.run(argv, check=True, input=data,
+                              stdin=subprocess.DEVNULL if data is None else None,
                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                               text=True, timeout=timeout).stdout
     except subprocess.CalledProcessError:
@@ -68,15 +71,24 @@ def run(endpoint):
     before_resolver = Path('/etc/resolv.conf').read_bytes()
     before_routes = command(['/usr/sbin/ip', '-j', '-4', 'route', 'show', 'table', 'all'])
     before_firewall = firewall_signature()
+    environment = tempfile.TemporaryDirectory(prefix='vpn-diagnostics-environment-', dir='/run')
+    # OpenVPN binds its server UDP socket to INADDR_ANY. On this synthetic
+    # second interface, replies use its directly connected gateway address.
+    # Pin that address so the real client guard validates the intended peer.
+    client_endpoint = GATEWAY
     process = subprocess.Popen([
         '/usr/bin/unshare', '--mount', '--net', '--pid', '--fork', '--mount-proc',
         '--propagation', 'private', '--', '/usr/bin/python3', '-I', '-B',
-        str(Path(__file__)), 'client', endpoint],
+        str(Path(__file__)), 'client', client_endpoint, environment.name],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         text=True, start_new_session=True)
     linked = False
+    rule_handle = None
     try:
-        if receive(process, timeout=30) != 'client namespace ready':
+        prepared = receive(process, timeout=30)
+        if prepared != 'client namespace ready':
+            if prepared.startswith('FAIL ') and re.fullmatch(r'[A-Za-z0-9 ,/_.()\-]{1,180}', prepared):
+                raise RuntimeError(prepared)
             raise RuntimeError('The isolated diagnostics client did not prepare.')
         # The unshare parent and its PID-namespace child share this fresh netns.
         PHASE = 'veth creation'
@@ -87,6 +99,24 @@ def run(endpoint):
         PHASE = 'veth configuration'
         command(['/usr/sbin/ip', 'address', 'add', GATEWAY+'/24', 'dev', PEER])
         command(['/usr/sbin/ip', 'link', 'set', PEER, 'up'])
+        # This synthetic client enters on our newly created veth, rather than
+        # the container's external eth0. Permit only its outer VPN handshake;
+        # the normal certificate/PAM, client guard and tunnel forwarding policy
+        # remain active. Separate-host acceptance exercises the actual eth0.
+        expression = [
+            {'match': {'op': '==', 'left': {'meta': {'key': 'iifname'}}, 'right': PEER}},
+            {'match': {'op': '==', 'left': {'payload': {'protocol': 'ip', 'field': 'saddr'}}, 'right': CLIENT_ADDRESS}},
+            {'match': {'op': '==', 'left': {'payload': {'protocol': 'ip', 'field': 'daddr'}}, 'right': client_endpoint}},
+            {'match': {'op': '==', 'left': {'payload': {'protocol': 'udp', 'field': 'dport'}}, 'right': 1194}},
+            {'accept': None}]
+        batch = {'nftables': [{'add': {'rule': {'family': 'inet', 'table': 'vpn_lab',
+                 'chain': 'input', 'expr': expression, 'comment': FIXTURE_RULE}}}]}
+        command(['/usr/sbin/nft', '-j', '-f', '-'], data=json.dumps(batch))
+        rules = json.loads(command(['/usr/sbin/nft', '-j', 'list', 'chain', 'inet', 'vpn_lab', 'input']))['nftables']
+        matching = [row['rule'] for row in rules if row.get('rule', {}).get('comment') == FIXTURE_RULE]
+        if len(matching) != 1 or matching[0].get('expr') != expression:
+            raise RuntimeError('The diagnostics synthetic handshake rule did not verify.')
+        rule_handle = matching[0]['handle']
         process.stdin.write('start\n')
         process.stdin.flush()
         # Only this fixed summary crosses out of the client namespace. The
@@ -107,12 +137,15 @@ def run(endpoint):
             process.wait(timeout=10)
         process.stdin.close()
         process.stdout.close()
+        if rule_handle is not None:
+            command(['/usr/sbin/nft', 'delete', 'rule', 'inet', 'vpn_lab', 'input', 'handle', str(rule_handle)])
         if linked:
             # Exiting the fresh namespace normally deletes both veth ends. Do
             # not turn successful teardown into an error or mask a prior one.
             links = json.loads(command(['/usr/sbin/ip', '-j', 'link', 'show']))
             if any(item.get('ifname') == PEER for item in links):
                 command(['/usr/sbin/ip', 'link', 'delete', PEER])
+        environment.cleanup()
     if (Path('/etc/resolv.conf').read_bytes() != before_resolver
             or command(['/usr/sbin/ip', '-j', '-4', 'route', 'show', 'table', 'all']) != before_routes
             or firewall_signature() != before_firewall):
@@ -137,6 +170,9 @@ def install_client(endpoint):
         'wifi_interface': 'wlan0', 'vpn_server_ipv4': endpoint, 'vpn_port': 1194,
         'vpn_protocol': 'udp', 'dhcp_server_ipv4': GATEWAY, 'server_name': 'VPNLabServer'})
     profile = Path('/root/vpn-lab/client.ovpn').read_text()
+    profile, replacements = re.subn(r'^remote [^\r\n]+$', 'remote '+endpoint+' 1194', profile, flags=re.M)
+    if replacements != 1:
+        raise RuntimeError('The diagnostics fixture profile endpoint did not verify.')
     security.validate_profile(profile, policy)
     contents = {name: (ROOT/'vpn-dashboard'/name).read_bytes()
                 for name in set(install.HELPERS + install.APPLICATION)}
@@ -155,14 +191,22 @@ def assert_clean(report):
         raise RuntimeError('The automated client broadened saved credential access.')
 
 
-def client(endpoint):
+def client(endpoint, environment):
     global PHASE
     disposable()
     os.umask(0o077)
-    # Docker normally bind mounts this file. Unmount it only inside our private
-    # mount namespace, exposing a regular disposable overlay file for the app's
-    # normal atomic resolver updates. The server keeps its original bind mount.
-    command(['/usr/bin/umount', '/etc/resolv.conf'])
+    # Isolate directory entries as well as mounts: atomic rename in a shared
+    # underlying /etc directory can hide another namespace's old file mount.
+    # A non-recursive bind of a private /etc copy avoids touching those entries
+    # and covers Docker's nested resolver/hosts file mounts with plain copies.
+    directory = Path(environment)
+    info = directory.lstat()
+    if (not directory.is_dir() or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700
+            or directory.parent != Path('/run') or not directory.name.startswith('vpn-diagnostics-environment-')):
+        raise RuntimeError('The private diagnostics filesystem did not verify.')
+    copied = directory/'etc'
+    shutil.copytree('/etc', copied, symlinks=True)
+    command(['/usr/bin/mount', '--bind', str(copied), '/etc'])
     resolver = Path('/etc/resolv.conf')
     if resolver.is_symlink():
         resolver.unlink()
@@ -193,6 +237,9 @@ def client(endpoint):
             report = json.loads(result.stdout)
         except ValueError:
             raise RuntimeError('The automated client did not produce one typed report.') from None
+        saved = Path('/run/vpn-diagnostics-fixture-report.json')
+        saved.write_bytes(result.stdout)
+        saved.chmod(0o600)
         return result, report
 
     PHASE = 'successful attempt'
@@ -220,10 +267,10 @@ def client(endpoint):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3 or sys.argv[1] != 'client':
+    if len(sys.argv) != 4 or sys.argv[1] != 'client':
         raise SystemExit('Use the disposable server diagnostics fixture entry point.')
     try:
-        client(sys.argv[2])
+        client(sys.argv[2], sys.argv[3])
     except Exception as error:
         detail = str(error) if type(error) is RuntimeError else type(error).__name__
         if re.fullmatch(r'[A-Za-z0-9 ,/_.()\-]{1,120}', detail) is None:
