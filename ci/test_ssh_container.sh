@@ -17,6 +17,7 @@ docker exec "$container" mkdir -p /test/ci /test/ops /test/vpn-dashboard
 docker cp ci/lab_admin.py "$container:/test/ci/lab_admin.py"
 docker cp ci/ssh_container_smoke.py "$container:/test/ci/ssh_container_smoke.py"
 docker cp ops/bootstrap_runner_key.py "$container:/test/ops/bootstrap_runner_key.py"
+docker cp ops/server_diagnostics.py "$container:/test/ops/server_diagnostics.py"
 docker cp ops/server_foundation.py "$container:/test/ops/server_foundation.py"
 docker cp ops/configure_download.py "$container:/test/ops/configure_download.py"
 docker cp vpn-dashboard/safe_io.py "$container:/test/vpn-dashboard/safe_io.py"

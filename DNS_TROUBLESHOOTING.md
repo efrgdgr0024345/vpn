@@ -38,6 +38,27 @@ The automatic **Session log / audit** check separates private DNS health from
 tunnel initialization and stays bound to `tun0`. It never falls back to LAN DNS.
 Neither this check nor a green OpenVPN message is a full leak test.
 
+## Inspect the server from an unaffected connection
+
+The GitHub administrator can run `diagnose-connection` independently of Kali's
+internet access. Start with a server baseline while Kali is disconnected, then
+capture another report during a failed connected lookup. The dedicated root SSH
+grant must still be valid. Do not require the owner to open the provider's web
+console through a failing VPN connection.
+
+The fixed read-only report checks Unbound/OpenVPN/broker state, DNS listeners,
+the local resolver response, and the kernel forwarding lease for the connected
+device. Its firewall counters help locate a query that reaches the server but
+is dropped. No second connection to OpenVPN's management socket is made: the
+authorization broker owns that channel.
+
+`test-foundation` separately performs real TLS/PAM and packet tests on the live
+server, with credentials retained locally. Its test client connects over server
+loopback; it does not establish the physical Kali or external Internet path.
+It temporarily uses the single VPN slot and exercises revocation/handover, so it
+must be coordinated with the owner. `probe-udp` tests external UDP arrival only,
+not an external client's TLS authentication. See GITHUB_LAB.md.
+
 ## Recover ordinary internet deliberately
 
 Press Ctrl+C in the original connection terminal and wait for the session to

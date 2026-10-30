@@ -16,7 +16,9 @@ import secrets
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'vpn-dashboard'))
+sys.path.insert(0, str(ROOT / 'ops'))
 from safe_io import bounded_run
+from server_diagnostics import validate_report as validate_connection_report
 
 ENVIRONMENT = {'PATH': '/usr/bin:/bin:/usr/sbin', 'LC_ALL': 'C'}
 
@@ -170,7 +172,7 @@ def private_file(path, contents):
 
 def execute(operation, environment, run=bounded_run):
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
-    if operation not in ('connectivity', 'inventory', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download',
+    if operation not in ('connectivity', 'inventory', 'diagnose-connection', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download',
                          'device-status','revoke-device','enable-device','reset-sessions','reboot-lab','rotate-password'):
         raise LabError('Unsupported lab operation.')
     host, port, fingerprint = settings(environment)
@@ -185,6 +187,8 @@ def execute(operation, environment, run=bounded_run):
     device=environment.get('VPN_LAB_DEVICE','kali')
     if device not in ('kali','iphone','android'):
         raise LabError('Select a fixed registered device name.')
+    if operation == 'diagnose-connection':
+        program = (ROOT/'ops/server_diagnostics.py').read_text()
     if operation in ('device-status','revoke-device','enable-device','reset-sessions','reboot-lab','rotate-password'):
         program=('DEVICE_OPERATION = '+repr(operation)+'\nDEVICE_NAME = '+repr(device)+'\n'
                  +(ROOT/'ops/device_admin.py').read_text())
@@ -264,6 +268,8 @@ def execute(operation, environment, run=bounded_run):
         if result.returncode:
             if result.returncode == 255 and re.search(r'Permission denied \([^\r\n]*\)', result.stderr):
                 raise LabError('SSH authentication rejected. The dedicated key grant may have expired; renew it in the provider console. Raw stderr withheld.')
+            if operation == 'diagnose-connection':
+                raise LabError('SSH connection diagnosis failed; raw diagnostic output and stderr withheld.')
             try:
                 failure=json.loads(result.stdout)
             except ValueError:
@@ -284,6 +290,9 @@ def execute(operation, environment, run=bounded_run):
             expected={'version','server_service_active','vpn_udp_port','recovery_ssh_port','max_clients',
                       'required_factors','retired_runner_services','client_profile','credential_file',
                       'staged_login_implemented','source_commit'}
+        elif operation=='diagnose-connection':
+            expected={'version','server_utc','ntp_synchronized','services','tunnel',
+                      'dns_listeners','authorization','input_counters','dns_probe'}
         elif operation=='test-foundation':
             expected={'correct_credentials_connect','wrong_password_rejected',
                       'ipv4_dns_roundtrip_through_vpn_and_nat','metadata_private_network_packet_dropped',
@@ -309,6 +318,11 @@ def execute(operation, environment, run=bounded_run):
             expected={'password_rotated','sessions_invalidated','old_download_closed','credential_contents_returned'}
         if not isinstance(report, dict) or set(report) != expected:
             raise LabError('Inventory returned unexpected fields; raw output withheld.')
+        if operation == 'diagnose-connection':
+            try:
+                validate_connection_report(report)
+            except ValueError:
+                raise LabError('Connection diagnosis returned unsupported data; raw output withheld.') from None
         if environment.get('GITHUB_ACTIONS') == 'true':
             # Checks annotations are available through api.github.com even when
             # signed log-download hosts cannot be reached by the controller.

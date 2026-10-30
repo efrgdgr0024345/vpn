@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 168 desktop and 64 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 168 desktop and 80 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
@@ -108,6 +108,12 @@ resolver, IPv6, sleep/resume or boot behavior. `DEVICE_TESTING.md` covers the fi
 controlled test of the owned app. Keep recovery instructions available offline
 before enabling a drop policy. Capture packet evidence outside the client before
 claiming leak prevention; tunnel presence alone is insufficient.
+
+Read-only server diagnosis has strict parsing/schema and bounded-command tests,
+including malformed/oversized/secret-bearing output rejection. Its root-local
+DNS query and actual tunnel/listener/firewall observations are also checked
+against Unbound in the disposable server container. These diagnostics never
+change a service, registry, route, resolver, firewall or management connection.
 
 Keep private profiles, keys, tokens and login files out of this public repository,
 chat, CI logs and artifacts. Source-only review bundles are reproducible from an

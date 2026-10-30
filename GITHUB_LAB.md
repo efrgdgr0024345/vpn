@@ -9,6 +9,7 @@ lab droplet. The working Access Server is outside this workflow's scope.
 | --- | --- |
 | `connectivity` | Reach SSH and compare its ED25519 key with the independently supplied provider-console fingerprint. No authentication or private key needed. |
 | `inventory` | Repeat identity verification, then run a fixed read-only Python inventory as root using the lab environment's dedicated SSH key. |
+| `diagnose-connection` | Read service health, the VPN interface, DNS bindings, the single-device forwarding lease, two fixed firewall counters and clock synchronization; test the VPS resolver locally. No configuration or session changes. |
 | `install-foundation` | Provision the disposable Debian 13 OpenVPN foundation, replacing its firewall and retiring old runner services. |
 | `test-foundation` | Test the running VPN locally without exporting its credentials or changing host routes/DNS. |
 | `probe-udp` | Send a random non-secret UDP probe from the GitHub runner and observe its arrival on the lab's external interface. No VPN credentials are exported. |
@@ -109,6 +110,16 @@ omitted. The approved inventory is also attached as a check notice, so an
 administrator can read it through GitHub's Checks API when log-download hosts
 are unreachable. Workflow-command escapes preserve literal percent sequences,
 and oversized notices fail before server data is printed.
+
+`diagnose-connection` adds a separate, strictly validated report for connection
+troubleshooting. It intentionally includes tunnel/DNS binding addresses and the
+authorized VPN source, plus a bounded `example.com` DNS result. Unknown nested
+fields, arbitrary service text and raw command errors are refused before output.
+It reads no profiles, credentials, journals or OpenVPN management socket. The
+DNS query binds to loopback and a verified local server tunnel address, never a
+public fallback. A successful local query alone does not test the remote client's
+path. Capture another report while the client is connected to inspect its lease
+and changes to the authorized-DNS/drop counters.
 
 The runner verifies the fingerprint before authentication and keeps strict SSH
 host checking enabled. Private temporary key files are 0600, deleted after use

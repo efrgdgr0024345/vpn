@@ -16,6 +16,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'ops'))
 import server_foundation as foundation
 import server_selftest
+import server_diagnostics
 import device_admin
 sys.path.insert(0,str(ROOT/'ci'))
 import client_control_smoke
@@ -93,6 +94,23 @@ def main():
                 time.sleep(.1)
             else:
                 raise RuntimeError('OpenVPN server initialization timed out.')
+            PHASE='read-only private DNS diagnostics'
+            end=time.monotonic()+10
+            while True:
+                diagnosis=server_diagnostics.collect()
+                if diagnosis['dns_probe']['status']=='ok':
+                    break
+                if time.monotonic()>=end:
+                    raise RuntimeError('Read-only diagnostics did not observe a local private DNS answer.')
+                time.sleep(.2)
+            listeners=diagnosis['dns_listeners'] or []
+            if (diagnosis['authorization']!={'element_count':0,'addresses':[]}
+                    or not diagnosis['tunnel']['present'] or not diagnosis['tunnel']['up']
+                    or any({'protocol':kind,'address':'172.27.240.1','port':53} not in listeners
+                           for kind in ('udp','tcp'))
+                    or any(value is None for value in diagnosis['input_counters'].values())):
+                raise RuntimeError('Read-only diagnostics did not match the real VPN and firewall baseline.')
+            print('PASS: read-only server diagnostics observe actual private DNS, tunnel, listeners and empty forwarding lease.',flush=True)
             PHASE='live VPN packet and token tests'
             print(json.dumps(server_selftest.test(broker.pid),sort_keys=True),flush=True)
             PHASE='owned app supervisor'

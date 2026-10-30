@@ -1,4 +1,5 @@
 import base64
+import copy
 import hashlib
 import io
 import json
@@ -29,6 +30,19 @@ REPORT = {'os': {'ID': 'debian'}, 'kernel': 'fixture', 'root_free_bytes': 1024,'
           'running_service_units': [], 'listening_ports': [],
           'candidate_vpn_subnet_overlaps_existing_route': False,
           'firewall_summary': None, 'tools': {}}
+CONNECTION_REPORT = {
+    'version': 1, 'server_utc': '2026-10-30T01:02:03+00:00', 'ntp_synchronized': True,
+    'services': [{'unit': unit, 'active_state': 'active', 'sub_state': 'running',
+                  'restarts': 0, 'result': 'success'} for unit in (
+                      'openvpn-server@vpn-lab.service', 'vpn-lab-broker.service', 'unbound.service')],
+    'tunnel': {'present': True, 'kind': 'tun', 'up': True, 'ipv4': ['172.27.240.1/24']},
+    'dns_listeners': [{'protocol': protocol, 'address': '172.27.240.1', 'port': 53}
+                      for protocol in ('udp', 'tcp')],
+    'authorization': {'element_count': 1, 'addresses': [{'ipv4': '172.27.240.10', 'expires_ms': 14000}]},
+    'input_counters': {name: {'packets': 0, 'bytes': 0} for name in (
+                        'vpn-lab-private-dns', 'vpn-lab-block-host')},
+    'dns_probe': {'status': 'ok', 'rcode': 0, 'answer_count': 1, 'elapsed_ms': 1},
+}
 
 
 class ConnectionTests(unittest.TestCase):
@@ -102,6 +116,75 @@ class ConnectionTests(unittest.TestCase):
             return self.result() if argv[0].endswith('ssh-keyscan') else self.result('{"password":"PRIVATE"}')
         with self.assertRaisesRegex(lab.LabError, 'unexpected fields'):
             lab.execute('inventory', {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY}, run)
+
+    def connection_diagnosis(self, report, *, code=0):
+        calls = []
+        def run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            if argv[0].endswith('ssh-keyscan'):
+                return self.result()
+            return subprocess.CompletedProcess([], code, json.dumps(report), 'PRIVATE STDERR')
+        lab.execute('diagnose-connection', {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY,
+                    'GITHUB_ACTIONS': 'true'}, run)
+        return calls
+
+    def test_connection_diagnosis_sends_only_the_fixed_read_only_program(self):
+        output = io.StringIO()
+        with patch('sys.stdout', output):
+            calls = self.connection_diagnosis(CONNECTION_REPORT)
+        self.assertEqual(len(calls), 2)
+        argv, options = calls[-1]
+        self.assertEqual(argv[-1], '/usr/bin/python3 -I -B -')
+        self.assertEqual(options['input'], (ROOT/'ops/server_diagnostics.py').read_text())
+        self.assertEqual(options['timeout'], 65)
+        for setting in ('StrictHostKeyChecking=yes', 'ForwardAgent=no', 'BatchMode=yes'):
+            self.assertIn(setting, argv)
+        notice = next(line for line in output.getvalue().splitlines()
+                      if line.startswith('::notice title=VPN lab diagnose-connection::'))
+        self.assertEqual(json.loads(unquote(notice.split('::', 2)[2])), CONNECTION_REPORT)
+        self.assertNotIn('TEST FIXTURE ONLY', output.getvalue())
+        self.assertNotIn('PRIVATE STDERR', output.getvalue())
+
+    def test_connection_diagnosis_rejects_unexpected_nested_fields_and_private_values(self):
+        reports = []
+        for section, key in ((None, 'password'), ('tunnel', 'profile'), ('dns_probe', 'raw_response')):
+            report = copy.deepcopy(CONNECTION_REPORT)
+            (report if section is None else report[section])[key] = 'PRIVATE DATA'
+            reports.append(report)
+        report = copy.deepcopy(CONNECTION_REPORT)
+        report['services'][0]['active_state'] = 'PRIVATE DATA'
+        reports.append(report)
+        report = copy.deepcopy(CONNECTION_REPORT)
+        report['authorization']['addresses'][0]['ipv4'] = 'PRIVATE DATA'
+        reports.append(report)
+        report = copy.deepcopy(CONNECTION_REPORT)
+        report['dns_probe']['status'] = 'PRIVATE DATA'
+        reports.append(report)
+        report = copy.deepcopy(CONNECTION_REPORT)
+        report['input_counters']['vpn-lab-private-dns']['packets'] = 'PRIVATE DATA'
+        reports.append(report)
+        for report in reports:
+            output = io.StringIO()
+            with patch('sys.stdout', output), self.assertRaises(lab.LabError) as error:
+                self.connection_diagnosis(report)
+            self.assertNotIn('PRIVATE DATA', output.getvalue())
+            self.assertNotIn('PRIVATE DATA', str(error.exception))
+            self.assertNotIn('::notice', output.getvalue())
+
+    def test_connection_diagnosis_failure_withholds_all_remote_details(self):
+        output = io.StringIO()
+        with patch('sys.stdout', output), self.assertRaises(lab.LabError) as error:
+            self.connection_diagnosis({'error': 'setup_failed', 'detail': 'PRIVATE DATA'}, code=1)
+        self.assertIn('diagnosis failed', str(error.exception))
+        self.assertNotIn('PRIVATE', str(error.exception))
+        self.assertNotIn('PRIVATE', output.getvalue())
+
+    def test_connection_diagnosis_has_no_workflow_mutation_gate(self):
+        workflow = (ROOT/'.github/workflows/lab-admin.yml').read_text()
+        option_line = next(line for line in workflow.splitlines() if 'options: [connectivity' in line)
+        gate_line = next(line for line in workflow.splitlines() if "if: inputs.operation == 'install-foundation'" in line)
+        self.assertIn('diagnose-connection', option_line)
+        self.assertNotIn('diagnose-connection', gate_line)
 
     def test_auth_rejection_is_classified_without_disclosing_stderr(self):
         def run(argv, **kwargs):

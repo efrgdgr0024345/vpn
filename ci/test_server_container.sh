@@ -29,6 +29,7 @@ docker exec "$server" sh -c 'apt-get update -qq >/tmp/packages.log 2>&1 && apt-g
 docker exec "$server" mkdir -p /test/ops /test/ci /test/vpn-dashboard
 docker cp ops/server_foundation.py "$server:/test/ops/server_foundation.py"
 docker cp ops/server_selftest.py "$server:/test/ops/server_selftest.py"
+docker cp ops/server_diagnostics.py "$server:/test/ops/server_diagnostics.py"
 docker cp ops/session_broker.py "$server:/test/ops/session_broker.py"
 docker cp ops/device_admin.py "$server:/test/ops/device_admin.py"
 docker cp ci/server_container_smoke.py "$server:/test/ci/server_container_smoke.py"
