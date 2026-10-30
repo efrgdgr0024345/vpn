@@ -1,5 +1,26 @@
 # Project history and current status
 
+## External client acceptance — 30 October 2026
+
+[Live external acceptance 41007155855](https://github.com/efrgdgr0024345/vpn/actions/runs/41007155855)
+passed from the owner's older Ubuntu 24.04 VPS to the lab over the real Internet:
+OpenVPN 2.6.19 login, private DNS, public IPv4 forwarding and certificate-verified
+HTTPS all succeeded. The client ran in a private network namespace, with userspace
+networking and DCO disabled. It preserved host routes/DNS and cleaned its private
+temporary files/processes. The fresh test certificate was revoked and the original
+device registry restored. Profiles/passwords passed only between the two owned
+VPSes over pinned SSH, never through the Actions runner or public reports.
+
+Post-test inspection confirmed the older Access Server still active. Lab diagnosis
+confirmed OpenVPN, broker and Unbound active with zero restarts, working private
+DNS and an empty forwarding lease. The expired file-download grant and its export
+copies were closed/removed again. Exact action links and test boundaries are in
+`deployments/vpn-lab.json`. The root VPN runtime remains at `8510966`; the tested
+diagnostic/controller source is `5614a6c`, with all five functional jobs and the
+security workflow successful. The physical Kali 2.7 DNS failure remains unconfirmed
+and needs local version/network evidence. No native phone app or boot guard was
+added by these test tools.
+
 ## Kali DNS troubleshooting follow-up
 
 The owner reports that browsers stop working during VPN connection attempts.

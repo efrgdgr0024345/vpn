@@ -1,6 +1,6 @@
 {
   "environment": "vpn-lab",
-  "stage": "handover fix deployed and verified after reboot; owned Kali controlled acceptance ready",
+  "stage": "external peer VPN login, private DNS, Internet forwarding and HTTPS verified; physical Kali diagnosis pending",
   "deployed_source_commit": "8510966a90bab33e7f848f6f8c1c534969d576e3",
   "os": "Debian 13",
   "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500400489",
@@ -11,7 +11,7 @@
   "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40451196198",
   "unit_tests_per_ubuntu_job": 173,
   "client_transfer": "Owner confirmed Kali profile/login downloaded with mode 0600 and verified server ED25519 fingerprint. Temporary download access closed; server export copies removed.",
-  "client_transfer_closure": "https://github.com/efrgdgr0024345/vpn/actions/runs/40437848772",
+  "client_transfer_closure": "https://github.com/efrgdgr0024345/vpn/actions/runs/41007962125",
   "validated": [
     "private VPN-only recursive DNS answers; native Unbound service recovers after reboot",
     "native VPN and broker services recover automatically after reboot",
@@ -29,10 +29,11 @@
     "private-network and cloud-metadata packet dropped",
     "IPv6 client block response",
     "external UDP 1194 reaches the rebooted server",
-    "forced delayed-broker replay/disconnect ordering preserves the original broker process and still denies replay forwarding"
+    "forced delayed-broker replay/disconnect ordering preserves the original broker process and still denies replay forwarding",
+    "separate owner VPS completes IPv4 VPN login, private DNS, public forwarding and verified HTTPS with fresh certificate and confirmed cleanup"
   ],
   "not_yet_validated": [
-    "physical Kali installation, OpenVPN 2.7, resolver and firewall integration",
+    "physical Kali OpenVPN 2.7 connection and resolver/firewall/DCO integration",
     "client physical-interface IPv4/IPv6/DNS leak testing and network/suspend transitions",
     "client early-boot guard: not implemented",
     "owned native iPhone/Android applications: not implemented",
@@ -89,5 +90,35 @@
     "deployed_source_commit": "8510966a90bab33e7f848f6f8c1c534969d576e3",
     "successful_installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500400489",
     "post_reboot_acceptance": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500906651"
+  },
+  "latest_external_acceptance": {
+    "date": "2026-10-30",
+    "controller_source_commit": "5614a6cd0c6ba3d633a8f71c2bed6e61b349e877",
+    "server_runtime_source_unchanged": true,
+    "live_server_selftest": "https://github.com/efrgdgr0024345/vpn/actions/runs/41002508197",
+    "external_udp_probe": "https://github.com/efrgdgr0024345/vpn/actions/runs/41002744053",
+    "external_client_test": "https://github.com/efrgdgr0024345/vpn/actions/runs/41007155855",
+    "external_client_os": "Ubuntu 24.04",
+    "external_client_openvpn": "2.6.19",
+    "external_client_slirp4netns": "1.2.1",
+    "external_client_mode": "IPv4 userspace in a private network namespace; DCO disabled",
+    "authenticated": true,
+    "private_dns_answered": true,
+    "public_ipv4_forwarding_verified": true,
+    "certificate_verified_https": true,
+    "peer_host_routes_and_dns_unchanged": true,
+    "private_temporary_files_and_processes_cleaned": true,
+    "original_device_registry_restored": true,
+    "fresh_test_certificate_revoked": true,
+    "private_credentials_in_reports": false,
+    "post_test_peer_inventory": "https://github.com/efrgdgr0024345/vpn/actions/runs/41007537520",
+    "older_access_server_active_after_test": true,
+    "post_test_lab_diagnosis": "https://github.com/efrgdgr0024345/vpn/actions/runs/41007873543",
+    "lab_services_active_without_restarts": true,
+    "lab_private_dns_answered_after_test": true,
+    "lab_forwarding_lease_empty_after_test": true,
+    "functional_checks": "https://github.com/efrgdgr0024345/vpn/actions/runs/41007113559",
+    "security_checks": "https://github.com/efrgdgr0024345/vpn/actions/runs/41007113432",
+    "limits": "This validates an external Ubuntu client, not Kali 2.7, its DCO driver, Wi-Fi, guard or DNS integration."
   }
 }
