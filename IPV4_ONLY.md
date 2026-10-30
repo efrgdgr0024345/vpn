@@ -1,5 +1,21 @@
 # IPv4-only Kali setup
 
+## Current deployment status and owner requirement
+
+The owner requires IPv6 disabled on the VPN server and persistently blocked on
+Kali, including before connection and after reboot. This is separate from the
+broader server lockdown and boot-image work currently deferred.
+
+This requirement is not yet fully deployed. The successful physical Kali report
+still has `ipv6_kernel_disabled: false`. The installed client selects IPv4 and
+its active guard blocks IPv6, while the deployed server denies IPv6 forwarding
+but still configures IPv6 tunnel addresses/pushes. Neither establishes complete
+host-wide IPv6 disablement. The Kali configuration below is prepared guidance;
+the server additionally needs a reviewed IPv4-only configuration migration and
+verification. Do not report either machine as fully disabled without live checks.
+
+## Prepared Kali configuration
+
 The owner's lab is reachable again after provider billing recovery. A stalled
 login while the VPN server was suspended does not establish an IPv6 fault.
 The owner separately requested IPv6 disabled entirely on Kali.
