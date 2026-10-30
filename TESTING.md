@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 168 desktop and 81 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 168 desktop and 112 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
@@ -114,6 +114,14 @@ including malformed/oversized/secret-bearing output rejection. Its root-local
 DNS query and actual tunnel/listener/firewall observations are also checked
 against Unbound in the disposable server container. These diagnostics never
 change a service, registry, route, resolver, firewall or management connection.
+
+External test access adds real Ed25519 generation/idempotency, lock contention,
+key-pair consistency and unsafe metadata/partial-file preservation regressions.
+Peer inspection refuses an incorrect host key before authentication, restricts
+SSH identities/forwarding and validates all nested public fields. The actual
+OpenSSH container also enrolls the server-retained public key, inspects its
+pinned peer and refuses a wrong fingerprint. No additional GitHub secret or
+external VPN profile/credential transfer is needed for that inspection.
 
 Keep private profiles, keys, tokens and login files out of this public repository,
 chat, CI logs and artifacts. Source-only review bundles are reproducible from an

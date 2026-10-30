@@ -7,7 +7,7 @@ on:
       operation:
         description: Lab operation (install-foundation changes the disposable server)
         type: choice
-        options: [connectivity, inventory, diagnose-connection, install-foundation, test-foundation, probe-udp, prepare-download, close-download, device-status, revoke-device, enable-device, reset-sessions, rotate-password, reboot-lab]
+        options: [connectivity, inventory, diagnose-connection, prepare-test-access, inspect-test-peer, install-foundation, test-foundation, probe-udp, prepare-download, close-download, device-status, revoke-device, enable-device, reset-sessions, rotate-password, reboot-lab]
         default: connectivity
       host:
         description: Disposable lab server IPv4 address (public workflow input)
@@ -31,6 +31,19 @@ on:
         type: choice
         options: [kali, iphone, android]
         default: kali
+      test_peer_host:
+        description: External test peer IPv4 address for inspect-test-peer
+        required: false
+        type: string
+      test_peer_host_fingerprint:
+        description: External peer ED25519 SHA256 fingerprint verified in its provider console
+        required: false
+        type: string
+      test_peer_port:
+        description: External test peer SSH port
+        default: '22'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -57,7 +70,7 @@ jobs:
 
   verified-build:
     needs: connectivity
-    if: inputs.operation == 'install-foundation' || inputs.operation == 'prepare-download' || inputs.operation == 'close-download' || inputs.operation == 'revoke-device' || inputs.operation == 'enable-device' || inputs.operation == 'reset-sessions' || inputs.operation == 'rotate-password' || inputs.operation == 'test-foundation' || inputs.operation == 'reboot-lab'
+    if: inputs.operation == 'install-foundation' || inputs.operation == 'prepare-download' || inputs.operation == 'close-download' || inputs.operation == 'revoke-device' || inputs.operation == 'enable-device' || inputs.operation == 'reset-sessions' || inputs.operation == 'rotate-password' || inputs.operation == 'test-foundation' || inputs.operation == 'reboot-lab' || inputs.operation == 'prepare-test-access'
     permissions:
       contents: read
       actions: read
@@ -91,4 +104,7 @@ jobs:
           VPN_LAB_OPERATION: ${{ inputs.operation }}
           VPN_LAB_DOWNLOAD_PUBLIC_KEY: ${{ inputs.download_public_key }}
           VPN_LAB_DEVICE: ${{ inputs.device }}
+          VPN_TEST_PEER_HOST: ${{ inputs.test_peer_host }}
+          VPN_TEST_PEER_HOST_FINGERPRINT: ${{ inputs.test_peer_host_fingerprint }}
+          VPN_TEST_PEER_PORT: ${{ inputs.test_peer_port }}
         run: /usr/bin/python3 -I -B ci/lab_admin.py "$VPN_LAB_OPERATION"

@@ -43,6 +43,16 @@ CONNECTION_REPORT = {
                         'vpn-lab-private-dns', 'vpn-lab-block-host')},
     'dns_probe': {'status': 'ok', 'rcode': 0, 'answer_count': 1, 'elapsed_ms': 1},
 }
+TEST_ACCESS_REPORT = {'ssh_public_key': 'ssh-ed25519 '+BLOB,
+                      'ssh_public_key_fingerprint': FINGERPRINT,
+                      'private_key_retained_on_server': True}
+TEST_PEER_SETTINGS = {'VPN_TEST_PEER_HOST': '192.0.2.11', 'VPN_TEST_PEER_PORT': '22',
+                      'VPN_TEST_PEER_HOST_FINGERPRINT': FINGERPRINT}
+TEST_PEER_REPORT = {'version': 1, 'root_confirmed': True,
+                    'os': {'ID': 'ubuntu', 'VERSION_ID': '20.04'}, 'kernel': '5.4.0-test',
+                    'access_server_active': True,
+                    'openvpn_client': {'path': '/usr/sbin/openvpn', 'version': '2.6.14'},
+                    'tools': {'ip': True, 'python3': True, 'curl': True, 'nft': True}}
 
 
 class ConnectionTests(unittest.TestCase):
@@ -185,6 +195,141 @@ class ConnectionTests(unittest.TestCase):
         gate_line = next(line for line in workflow.splitlines() if "if: inputs.operation == 'install-foundation'" in line)
         self.assertIn('diagnose-connection', option_line)
         self.assertNotIn('diagnose-connection', gate_line)
+
+    def prepare_test_access(self, report, *, code=0):
+        calls = []
+        def run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            if argv[0].endswith('ssh-keyscan'):
+                return self.result()
+            return subprocess.CompletedProcess([], code, json.dumps(report), 'PRIVATE STDERR')
+        lab.execute('prepare-test-access', {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY,
+                    'GITHUB_ACTIONS': 'true'}, run)
+        return calls
+
+    def test_test_access_preparation_sends_fixed_program_and_reports_only_public_key(self):
+        output = io.StringIO()
+        with patch('sys.stdout', output):
+            calls = self.prepare_test_access(TEST_ACCESS_REPORT)
+        self.assertEqual(len(calls), 2)
+        argv, options = calls[-1]
+        self.assertEqual(argv[-1], '/usr/bin/python3 -I -B -')
+        self.assertEqual(options['input'], (ROOT/'ops/prepare_test_access.py').read_text())
+        for setting in ('StrictHostKeyChecking=yes', 'ForwardAgent=no', 'BatchMode=yes'):
+            self.assertIn(setting, argv)
+        notice = next(line for line in output.getvalue().splitlines()
+                      if line.startswith('::notice title=VPN lab prepare-test-access::'))
+        self.assertEqual(json.loads(unquote(notice.split('::', 2)[2])), TEST_ACCESS_REPORT)
+        self.assertNotIn('TEST FIXTURE ONLY', output.getvalue())
+        self.assertNotIn('PRIVATE STDERR', output.getvalue())
+
+    def test_test_access_preparation_refuses_private_fields_bad_wire_and_fingerprint(self):
+        reports = [{**TEST_ACCESS_REPORT, 'ssh_private_key': 'PRIVATE DATA'},
+                   {**TEST_ACCESS_REPORT, 'ssh_public_key': 'PRIVATE DATA'},
+                   {**TEST_ACCESS_REPORT, 'ssh_public_key': KEY},
+                   {**TEST_ACCESS_REPORT, 'ssh_public_key': 'ssh-ed25519 '+base64.b64encode(WIRE[:-1]).decode()},
+                   {**TEST_ACCESS_REPORT, 'ssh_public_key': 'ssh-rsa '+BLOB},
+                   {**TEST_ACCESS_REPORT, 'ssh_public_key': 'ssh-ed25519 '+BLOB+'\nPRIVATE DATA'},
+                   {**TEST_ACCESS_REPORT, 'ssh_public_key_fingerprint': 'SHA256:'+'A'*43},
+                   {**TEST_ACCESS_REPORT, 'private_key_retained_on_server': 'PRIVATE DATA'},
+                   {**TEST_ACCESS_REPORT, 'private_key_retained_on_server': False}]
+        for report in reports:
+            output = io.StringIO()
+            with patch('sys.stdout', output), self.assertRaises(lab.LabError) as error:
+                self.prepare_test_access(report)
+            for private in ('PRIVATE DATA', 'TEST FIXTURE ONLY'):
+                self.assertNotIn(private, output.getvalue())
+                self.assertNotIn(private, str(error.exception))
+            self.assertNotIn('::notice', output.getvalue())
+
+    def test_test_access_preparation_failure_withholds_remote_details(self):
+        output = io.StringIO()
+        with patch('sys.stdout', output), self.assertRaises(lab.LabError) as error:
+            self.prepare_test_access({'error': 'setup_failed', 'detail': 'PRIVATE DATA'}, code=1)
+        self.assertIn('preparation failed', str(error.exception))
+        self.assertNotIn('PRIVATE', str(error.exception))
+        self.assertNotIn('PRIVATE', output.getvalue())
+
+    def test_test_access_preparation_requires_matching_build_gate(self):
+        workflow = (ROOT/'.github/workflows/lab-admin.yml').read_text()
+        option_line = next(line for line in workflow.splitlines() if 'options: [connectivity' in line)
+        gate_line = next(line for line in workflow.splitlines() if "if: inputs.operation == 'install-foundation'" in line)
+        self.assertIn('prepare-test-access', option_line)
+        self.assertIn("inputs.operation == 'prepare-test-access'", gate_line)
+        self.assertIn('secrets.VPN_LAB_SSH_PRIVATE_KEY', workflow)
+        self.assertNotIn('VPN_TEST_SSH_PRIVATE_KEY', workflow)
+
+    def inspect_test_peer(self, report, *, code=0):
+        calls = []
+        def run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            if argv[0].endswith('ssh-keyscan'):
+                return self.result()
+            return subprocess.CompletedProcess([], code, json.dumps(report), 'PRIVATE STDERR')
+        lab.execute('inspect-test-peer', {**SETTINGS, **TEST_PEER_SETTINGS,
+                    'VPN_LAB_SSH_PRIVATE_KEY': KEY, 'GITHUB_ACTIONS': 'true'}, run)
+        return calls
+
+    def test_peer_inspection_embeds_only_validated_settings_in_fixed_program(self):
+        output = io.StringIO()
+        with patch('sys.stdout', output):
+            calls = self.inspect_test_peer(TEST_PEER_REPORT)
+        self.assertEqual(len(calls), 2)
+        argv, options = calls[-1]
+        self.assertEqual(argv[-2:], ['root@192.0.2.10', '/usr/bin/python3 -I -B -'])
+        expected = ("TEST_PEER_HOST = '192.0.2.11'\nTEST_PEER_HOST_FINGERPRINT = "
+                    +repr(FINGERPRINT)+"\nTEST_PEER_PORT = '22'\n"
+                    +(ROOT/'ops/inspect_test_peer.py').read_text())
+        self.assertEqual(options['input'], expected)
+        notice = next(line for line in output.getvalue().splitlines()
+                      if line.startswith('::notice title=VPN lab inspect-test-peer::'))
+        self.assertEqual(json.loads(unquote(notice.split('::', 2)[2])), TEST_PEER_REPORT)
+        self.assertNotIn('TEST FIXTURE ONLY', output.getvalue())
+        self.assertNotIn('PRIVATE STDERR', output.getvalue())
+
+    def test_invalid_peer_settings_stop_before_any_network_or_authentication(self):
+        for key, value in (('VPN_TEST_PEER_HOST', ''), ('VPN_TEST_PEER_HOST', '192.0.2.11; id'),
+                           ('VPN_TEST_PEER_HOST', '127.0.0.1'), ('VPN_TEST_PEER_PORT', '22 -v'),
+                           ('VPN_TEST_PEER_PORT', '65536'), ('VPN_TEST_PEER_HOST_FINGERPRINT', ''),
+                           ('VPN_TEST_PEER_HOST_FINGERPRINT', 'SHA256:short')):
+            def no_network(*args, **kwargs):
+                self.fail('Invalid external peer settings reached a network tool.')
+            with self.assertRaises(lab.LabError):
+                lab.execute('inspect-test-peer', {**SETTINGS, **TEST_PEER_SETTINGS, key: value,
+                            'VPN_LAB_SSH_PRIVATE_KEY': KEY}, no_network)
+
+    def test_peer_inspection_rejects_private_or_unknown_nested_output(self):
+        reports = [{**TEST_PEER_REPORT, 'private_key': 'PRIVATE DATA'},
+                   {**TEST_PEER_REPORT, 'kernel': 'PRIVATE DATA'},
+                   {**TEST_PEER_REPORT, 'os': {'ID': 'PRIVATE DATA', 'VERSION_ID': None}},
+                   {**TEST_PEER_REPORT, 'tools': {**TEST_PEER_REPORT['tools'], 'raw': 'PRIVATE DATA'}},
+                   {**TEST_PEER_REPORT, 'openvpn_client': {'path': '/root/PRIVATE', 'version': None}},
+                   {**TEST_PEER_REPORT, 'root_confirmed': False}]
+        for report in reports:
+            output = io.StringIO()
+            with patch('sys.stdout', output), self.assertRaises(lab.LabError) as error:
+                self.inspect_test_peer(report)
+            self.assertNotIn('PRIVATE', output.getvalue())
+            self.assertNotIn('PRIVATE', str(error.exception))
+            self.assertNotIn('::notice', output.getvalue())
+
+    def test_peer_inspection_failure_withholds_remote_details(self):
+        output = io.StringIO()
+        with patch('sys.stdout', output), self.assertRaises(lab.LabError) as error:
+            self.inspect_test_peer({'error': 'setup_failed', 'detail': 'PRIVATE DATA'}, code=1)
+        self.assertIn('inspection failed', str(error.exception))
+        self.assertNotIn('PRIVATE', str(error.exception))
+        self.assertNotIn('PRIVATE', output.getvalue())
+
+    def test_peer_inspection_is_read_only_and_uses_public_inputs_not_a_new_secret(self):
+        workflow = (ROOT/'.github/workflows/lab-admin.yml').read_text()
+        gate_line = next(line for line in workflow.splitlines() if "if: inputs.operation == 'install-foundation'" in line)
+        self.assertNotIn("inputs.operation == 'inspect-test-peer'", gate_line)
+        for field, name in (('test_peer_host', 'VPN_TEST_PEER_HOST'),
+                            ('test_peer_host_fingerprint', 'VPN_TEST_PEER_HOST_FINGERPRINT'),
+                            ('test_peer_port', 'VPN_TEST_PEER_PORT')):
+            self.assertIn(name+': ${{ inputs.'+field+' }}', workflow)
+        self.assertNotIn('secrets.VPN_TEST_SSH_PRIVATE_KEY', workflow)
 
     def test_auth_rejection_is_classified_without_disclosing_stderr(self):
         def run(argv, **kwargs):

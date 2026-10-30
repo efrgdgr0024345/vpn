@@ -19,6 +19,8 @@ sys.path.insert(0, str(ROOT / 'vpn-dashboard'))
 sys.path.insert(0, str(ROOT / 'ops'))
 from safe_io import bounded_run
 from server_diagnostics import validate_report as validate_connection_report
+from prepare_test_access import validate_report as validate_test_access_report
+from inspect_test_peer import validate_report as validate_test_peer_report
 
 ENVIRONMENT = {'PATH': '/usr/bin:/bin:/usr/sbin', 'LC_ALL': 'C'}
 
@@ -172,10 +174,15 @@ def private_file(path, contents):
 
 def execute(operation, environment, run=bounded_run):
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
-    if operation not in ('connectivity', 'inventory', 'diagnose-connection', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download',
+    if operation not in ('connectivity', 'inventory', 'diagnose-connection', 'prepare-test-access', 'inspect-test-peer', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download',
                          'device-status','revoke-device','enable-device','reset-sessions','reboot-lab','rotate-password'):
         raise LabError('Unsupported lab operation.')
     host, port, fingerprint = settings(environment)
+    peer = None
+    if operation == 'inspect-test-peer':
+        peer = settings({'VPN_LAB_HOST': environment.get('VPN_TEST_PEER_HOST', ''),
+                         'VPN_LAB_PORT': environment.get('VPN_TEST_PEER_PORT', '22'),
+                         'VPN_LAB_HOST_FINGERPRINT': environment.get('VPN_TEST_PEER_HOST_FINGERPRINT', '')})
     known = verified_host(host, port, fingerprint, run)
     print('SSH host identity verified against the provider-console fingerprint.')
     if operation == 'connectivity':
@@ -189,6 +196,13 @@ def execute(operation, environment, run=bounded_run):
         raise LabError('Select a fixed registered device name.')
     if operation == 'diagnose-connection':
         program = (ROOT/'ops/server_diagnostics.py').read_text()
+    if operation == 'prepare-test-access':
+        program = (ROOT/'ops/prepare_test_access.py').read_text()
+    if operation == 'inspect-test-peer':
+        peer_host, peer_port, peer_fingerprint = peer
+        program = ('TEST_PEER_HOST = '+repr(peer_host)+'\nTEST_PEER_HOST_FINGERPRINT = '
+                   +repr(peer_fingerprint)+'\nTEST_PEER_PORT = '+repr(peer_port)+'\n'
+                   +(ROOT/'ops/inspect_test_peer.py').read_text())
     if operation in ('device-status','revoke-device','enable-device','reset-sessions','reboot-lab','rotate-password'):
         program=('DEVICE_OPERATION = '+repr(operation)+'\nDEVICE_NAME = '+repr(device)+'\n'
                  +(ROOT/'ops/device_admin.py').read_text())
@@ -270,6 +284,10 @@ def execute(operation, environment, run=bounded_run):
                 raise LabError('SSH authentication rejected. The dedicated key grant may have expired; renew it in the provider console. Raw stderr withheld.')
             if operation == 'diagnose-connection':
                 raise LabError('SSH connection diagnosis failed; raw diagnostic output and stderr withheld.')
+            if operation == 'prepare-test-access':
+                raise LabError('SSH test access preparation failed; raw output and stderr withheld.')
+            if operation == 'inspect-test-peer':
+                raise LabError('SSH test peer inspection failed; raw output and stderr withheld.')
             try:
                 failure=json.loads(result.stdout)
             except ValueError:
@@ -293,6 +311,10 @@ def execute(operation, environment, run=bounded_run):
         elif operation=='diagnose-connection':
             expected={'version','server_utc','ntp_synchronized','services','tunnel',
                       'dns_listeners','authorization','input_counters','dns_probe'}
+        elif operation=='prepare-test-access':
+            expected={'ssh_public_key','ssh_public_key_fingerprint','private_key_retained_on_server'}
+        elif operation=='inspect-test-peer':
+            expected={'version','root_confirmed','os','kernel','access_server_active','openvpn_client','tools'}
         elif operation=='test-foundation':
             expected={'correct_credentials_connect','wrong_password_rejected',
                       'ipv4_dns_roundtrip_through_vpn_and_nat','metadata_private_network_packet_dropped',
@@ -323,6 +345,16 @@ def execute(operation, environment, run=bounded_run):
                 validate_connection_report(report)
             except ValueError:
                 raise LabError('Connection diagnosis returned unsupported data; raw output withheld.') from None
+        if operation == 'prepare-test-access':
+            try:
+                validate_test_access_report(report)
+            except ValueError:
+                raise LabError('Test access preparation returned unsupported public-key data; raw output withheld.') from None
+        if operation == 'inspect-test-peer':
+            try:
+                validate_test_peer_report(report)
+            except ValueError:
+                raise LabError('Test peer inspection returned unsupported data; raw output withheld.') from None
         if environment.get('GITHUB_ACTIONS') == 'true':
             # Checks annotations are available through api.github.com even when
             # signed log-download hosts cannot be reached by the controller.

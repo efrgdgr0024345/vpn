@@ -10,6 +10,8 @@ lab droplet. The working Access Server is outside this workflow's scope.
 | `connectivity` | Reach SSH and compare its ED25519 key with the independently supplied provider-console fingerprint. No authentication or private key needed. |
 | `inventory` | Repeat identity verification, then run a fixed read-only Python inventory as root using the lab environment's dedicated SSH key. |
 | `diagnose-connection` | Read service health, the VPN interface, DNS bindings, the single-device forwarding lease, two fixed firewall counters and clock synchronization; test the VPS resolver locally. No configuration or session changes. |
+| `prepare-test-access` | Create or verify a dedicated root-protected SSH test identity on the lab. Return its public key/fingerprint only; its private key stays on the lab. Requires matching build checks. |
+| `inspect-test-peer` | From the lab, verify an external test machine's supplied host fingerprint and inspect it using the dedicated test key. Fixed read-only inventory; no package, service or network changes. |
 | `install-foundation` | Provision the disposable Debian 13 OpenVPN foundation, replacing its firewall and retiring old runner services. |
 | `test-foundation` | Test the running VPN locally without exporting its credentials or changing host routes/DNS. |
 | `probe-udp` | Send a random non-secret UDP probe from the GitHub runner and observe its arrival on the lab's external interface. No VPN credentials are exported. |
@@ -85,6 +87,24 @@ PY
 ```
 
 ## Run and inspect
+
+For an external VPN test client, the owner selected the existing older VPS and
+asked to grant access from the lab rather than create another GitHub secret.
+`prepare-test-access` creates an idempotent Ed25519 identity at
+`/root/.vpn-lab-external-test/id_ed25519`, under a root-only directory. It does
+not export that private file. The owner authorizes only its public key on the
+external machine with a temporary SSH expiry and supplies that machine's SSH
+host fingerprint through the provider console.
+
+`inspect-test-peer` still connects to the lab using the existing lab environment
+secret. Its optional `test_peer_host`, `test_peer_port` and
+`test_peer_host_fingerprint` inputs select the separate, pinned inspection target.
+The lab verifies that host key before presenting its dedicated test identity.
+The peer returns a bounded, strictly validated OS/client-tool inventory; it
+never receives general command input. No extra GitHub secret is required.
+The private key remains on the lab, and peer inspection does not start a VPN,
+change the old Access Server or replace any routes, resolver or firewall rules.
+Actual external VPN packet acceptance is a separate test after this access step.
 
 The gated `rotate-password` operation is independent root-only recovery for an
 exposed initial VPN password. It preflights the protected original/device copies,

@@ -14,6 +14,8 @@ import lab_admin
 import bootstrap_runner_key
 import configure_download
 import server_foundation
+import prepare_test_access
+import inspect_test_peer
 
 
 def main():
@@ -50,6 +52,24 @@ X11Forwarding no
                 'VPN_LAB_HOST_FINGERPRINT':fingerprint, 'VPN_LAB_SSH_PRIVATE_KEY':original}
     lab_admin.execute('connectivity', settings)
     lab_admin.execute('inventory', settings)
+    # The test identity stays on the first server. Only its public key is
+    # enrolled on this isolated SSH peer; no GitHub/private-key export is used.
+    access=prepare_test_access.prepare()
+    if prepare_test_access.prepare()!=access:
+        raise SystemExit('Preparing test access replaced its existing identity.')
+    import datetime
+    expires=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(hours=1)).strftime('%Y%m%d%H%M%SZ')
+    bootstrap_runner_key.authorize(Path('/root/.ssh'),access['ssh_public_key'],expires)
+    peer=inspect_test_peer.inspect(settings['VPN_LAB_HOST'],'22',fingerprint)
+    if peer['root_confirmed'] is not True or peer['os']['ID']!='debian':
+        raise SystemExit('The server-retained test key did not inspect the pinned peer.')
+    try:
+        inspect_test_peer.inspect(settings['VPN_LAB_HOST'],'22','SHA256:'+'A'*43)
+    except inspect_test_peer.PeerError:
+        pass
+    else:
+        raise SystemExit('Peer inspection accepted an incorrect host fingerprint.')
+    print('PASS: server-retained Ed25519 identity, idempotent creation and pinned read-only SSH peer inspection.',flush=True)
     public = subprocess.check_output(['/usr/bin/ssh-keygen','-y','-f',str(key)], text=True)
     bootstrap_runner_key.authorize(Path('/root/.ssh'), public, '20000101000000Z')
     try:
