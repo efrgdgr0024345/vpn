@@ -137,6 +137,7 @@ class PreparationAndCleanupTests(unittest.TestCase):
     def test_prepare_does_not_install_when_tools_and_trust_exist(self):
         with patch.object(client,'state_fingerprint',return_value=('routes','dns')), \
                 patch.object(Path,'is_file',return_value=True), \
+                patch.object(client.ssl,'get_default_verify_paths',return_value=MagicMock(cafile='/etc/ssl/certs/ca-certificates.crt')), \
                 patch.object(client,'versions',return_value={'client_version':'2.6.14','slirp_version':'1.2.1'}), \
                 patch.object(client,'command') as command:
             report=client.prepare()
