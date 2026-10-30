@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / 'ci'))
 sys.path.insert(0, str(ROOT / 'ops'))
 import lab_admin as lab
 import bootstrap_runner_key as bootstrap
+import peer_vpn_client as peer_client
 
 WIRE = b'\0\0\0\x0bssh-ed25519\0\0\0\x20' + bytes(range(32))
 BLOB = base64.b64encode(WIRE).decode()
@@ -53,6 +54,9 @@ TEST_PEER_REPORT = {'version': 1, 'root_confirmed': True,
                     'access_server_active': True,
                     'openvpn_client': {'path': '/usr/sbin/openvpn', 'version': '2.6.14'},
                     'tools': {'ip': True, 'python3': True, 'curl': True, 'nft': True}}
+EXTERNAL_BUSY_REPORT = {'version': 1, 'peer_prepared': False, 'test': None,
+                        'registry_restored': True, 'ephemeral_certificate_revoked': True,
+                        'credential_contents_returned': False, 'stage': 'preflight', 'failure': 'busy'}
 
 
 class ConnectionTests(unittest.TestCase):
@@ -294,9 +298,10 @@ class ConnectionTests(unittest.TestCase):
                            ('VPN_TEST_PEER_HOST_FINGERPRINT', 'SHA256:short')):
             def no_network(*args, **kwargs):
                 self.fail('Invalid external peer settings reached a network tool.')
-            with self.assertRaises(lab.LabError):
-                lab.execute('inspect-test-peer', {**SETTINGS, **TEST_PEER_SETTINGS, key: value,
-                            'VPN_LAB_SSH_PRIVATE_KEY': KEY}, no_network)
+            for operation in ('inspect-test-peer', 'test-from-peer'):
+                with self.assertRaises(lab.LabError):
+                    lab.execute(operation, {**SETTINGS, **TEST_PEER_SETTINGS, key: value,
+                                'VPN_LAB_SSH_PRIVATE_KEY': KEY}, no_network)
 
     def test_peer_inspection_rejects_private_or_unknown_nested_output(self):
         reports = [{**TEST_PEER_REPORT, 'private_key': 'PRIVATE DATA'},
@@ -330,6 +335,110 @@ class ConnectionTests(unittest.TestCase):
                             ('test_peer_port', 'VPN_TEST_PEER_PORT')):
             self.assertIn(name+': ${{ inputs.'+field+' }}', workflow)
         self.assertNotIn('secrets.VPN_TEST_SSH_PRIVATE_KEY', workflow)
+
+    def external_vpn_test(self, report, *, code=0, calls=None):
+        calls = [] if calls is None else calls
+        def run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            if argv[0].endswith('ssh-keyscan'):
+                return self.result()
+            return subprocess.CompletedProcess([], code, json.dumps(report), 'PRIVATE STDERR')
+        lab.execute('test-from-peer', {**SETTINGS, **TEST_PEER_SETTINGS,
+                    'VPN_LAB_SSH_PRIVATE_KEY': KEY, 'GITHUB_ACTIONS': 'true'}, run)
+        return calls
+
+    def successful_external_report(self):
+        test = peer_client.empty_report()
+        test.update({name: True for name in ('passed','tools_ready','namespace_isolated','handshake',
+                      'host_routes_unchanged','host_dns_unchanged','cleanup_confirmed')})
+        test.update({'stage': 'complete', 'client_version': '2.6.14',
+                     'private_dns': {'status': 'ok', 'rcode': 0, 'answers': 1},
+                     'public_dns': {'status': 'ok', 'rcode': 0, 'answers': 1}, 'https_status': 'ok'})
+        return {'version': 1, 'peer_prepared': True, 'test': test, 'registry_restored': True,
+                'ephemeral_certificate_revoked': True, 'credential_contents_returned': False,
+                'stage': 'complete', 'failure': None}
+
+    def test_successful_external_vpn_acceptance_is_reported_without_failing(self):
+        report = self.successful_external_report()
+        output = io.StringIO()
+        with patch('sys.stdout', output):
+            calls = self.external_vpn_test(report)
+        self.assertEqual(len(calls), 2)
+        self.assertIn('Lab test-from-peer completed', output.getvalue())
+        notice = next(line for line in output.getvalue().splitlines()
+                      if line.startswith('::notice title=VPN lab test-from-peer::'))
+        self.assertEqual(json.loads(unquote(notice.split('::', 2)[2])), report)
+
+    def test_failed_external_packets_or_cleanup_log_typed_report_then_fail_the_job(self):
+        packet_failure = self.successful_external_report()
+        packet_failure.update(stage='peer_test', failure='test_failed')
+        packet_failure['test'].update(passed=False, stage='private_dns', error='dns_failed')
+        packet_failure['test']['private_dns'] = {'status': 'timeout', 'rcode': None, 'answers': None}
+        registry_failure = self.successful_external_report()
+        registry_failure.update(stage='cleanup', failure='registry_changed', registry_restored=False)
+        certificate_failure = self.successful_external_report()
+        certificate_failure.update(stage='cleanup', failure='certificate_cleanup_failed', ephemeral_certificate_revoked=False)
+        for report in (packet_failure, registry_failure, certificate_failure):
+            output = io.StringIO()
+            with patch('sys.stdout', output), self.assertRaisesRegex(lab.LabError, 'at '+report['stage']):
+                self.external_vpn_test(report)
+            notice = next(line for line in output.getvalue().splitlines()
+                          if line.startswith('::notice title=VPN lab test-from-peer::'))
+            self.assertEqual(json.loads(unquote(notice.split('::', 2)[2])), report)
+            self.assertNotIn('Lab test-from-peer completed', output.getvalue())
+            self.assertNotIn('PRIVATE STDERR', output.getvalue())
+
+    def test_external_vpn_payload_contains_only_public_source_and_validated_endpoints(self):
+        output, calls = io.StringIO(), []
+        with patch('sys.stdout', output), self.assertRaisesRegex(lab.LabError, 'at preflight'):
+            self.external_vpn_test(EXTERNAL_BUSY_REPORT, calls=calls)
+        self.assertEqual(len(calls), 2)
+        argv, options = calls[-1]
+        self.assertEqual(argv[-2:], ['root@192.0.2.10', '/usr/bin/python3 -I -B -'])
+        expected = ("TEST_PEER_HOST = '192.0.2.11'\nTEST_PEER_HOST_FINGERPRINT = "
+                    +repr(FINGERPRINT)+"\nTEST_PEER_PORT = '22'\nTEST_SERVER_HOST = '192.0.2.10'\n"
+                    +'PEER_LIBRARY_SOURCE = '+repr((ROOT/'ops/inspect_test_peer.py').read_text())+'\n'
+                    +'PEER_CLIENT_SOURCE = '+repr((ROOT/'ops/peer_vpn_client.py').read_text())+'\n'
+                    +(ROOT/'ops/external_vpn_test.py').read_text())
+        self.assertEqual(options['input'], expected)
+        self.assertEqual(options['timeout'], 900)
+        self.assertNotIn(KEY, options['input'])
+        notice = next(line for line in output.getvalue().splitlines()
+                      if line.startswith('::notice title=VPN lab test-from-peer::'))
+        self.assertEqual(json.loads(unquote(notice.split('::', 2)[2])), EXTERNAL_BUSY_REPORT)
+        self.assertNotIn('PRIVATE STDERR', output.getvalue())
+
+    def test_external_vpn_reports_reject_secret_fields_and_untyped_failures_before_printing(self):
+        reports = [{**EXTERNAL_BUSY_REPORT, 'private_key': 'PRIVATE DATA'},
+                   {**EXTERNAL_BUSY_REPORT, 'failure': 'PRIVATE DATA'},
+                   {**EXTERNAL_BUSY_REPORT, 'stage': 'PRIVATE DATA'},
+                   {**EXTERNAL_BUSY_REPORT, 'credential_contents_returned': True},
+                   {**EXTERNAL_BUSY_REPORT, 'test': {'passed': False, 'raw_log': 'PRIVATE DATA'}}]
+        for report in reports:
+            output = io.StringIO()
+            with patch('sys.stdout', output), self.assertRaises(lab.LabError) as error:
+                self.external_vpn_test(report)
+            self.assertNotIn('PRIVATE', output.getvalue())
+            self.assertNotIn('PRIVATE', str(error.exception))
+            self.assertNotIn('::notice', output.getvalue())
+
+    def test_external_vpn_command_failure_withholds_raw_remote_output(self):
+        output = io.StringIO()
+        with patch('sys.stdout', output), self.assertRaises(lab.LabError) as error:
+            self.external_vpn_test({'error': 'setup_failed', 'detail': 'PRIVATE DATA'}, code=1)
+        self.assertIn('external VPN test failed', str(error.exception))
+        self.assertNotIn('PRIVATE', str(error.exception))
+        self.assertNotIn('PRIVATE', output.getvalue())
+
+    def test_external_vpn_operation_requires_build_gate_and_no_extra_private_inputs(self):
+        workflow = (ROOT/'.github/workflows/lab-admin.yml').read_text()
+        option_line = next(line for line in workflow.splitlines() if 'options: [connectivity' in line)
+        gate_line = next(line for line in workflow.splitlines() if "if: inputs.operation == 'install-foundation'" in line)
+        self.assertIn('test-from-peer', option_line)
+        self.assertIn("inputs.operation == 'test-from-peer'", gate_line)
+        self.assertNotIn('secrets.VPN_TEST_SSH_PRIVATE_KEY', workflow)
+        self.assertNotIn('inputs.profile', workflow)
+        self.assertNotIn('inputs.password', workflow)
 
     def test_auth_rejection_is_classified_without_disclosing_stderr(self):
         def run(argv, **kwargs):

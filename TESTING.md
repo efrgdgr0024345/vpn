@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 168 desktop and 112 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 168 desktop and 146 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
@@ -36,8 +36,10 @@ and ignores the unchanged server's IPv6 pushes. This verifies protocol handling;
 host-wide kernel/sysctl disablement still needs physical acceptance. Synthetic DNS
 is confined to that isolated harness; production uses the VPS's recursive resolver.
 
-Only explicit TUN/NET_ADMIN access is granted to the VPN containers. They publish
-no host ports and mount no host credentials. Namespace/kernel tests fail if they
+The VPN server container receives explicit TUN/NET_ADMIN access. The external
+client fixture additionally receives SYS_ADMIN and a relaxed seccomp profile to
+create its private network namespace. Containers publish no host ports and mount
+no host credentials. Namespace/kernel tests fail if they
 cannot run rather than silently skipping validation.
 
 A separate Debian container, without added capabilities or host mounts, runs
@@ -122,6 +124,17 @@ SSH identities/forwarding and validates all nested public fields. The actual
 OpenSSH container also enrolls the server-retained public key, inspects its
 pinned peer and refuses a wrong fingerprint. No additional GitHub secret or
 external VPN profile/credential transfer is needed for that inspection.
+
+The VPN container job also exercises the external client through a separate SSH
+peer, real userspace networking, TLS/PAM and the actual authorization broker.
+Synthetic public DNS and HTTPS endpoints are routed only inside this Docker
+network. Its fixture CA is trusted only in that disposable peer; production uses
+the peer's ordinary OS CA store. A private apt proxy fixture preserves any runner
+package proxy across SSH without exposing its environment values in reports.
+Acceptance requires DNS, forwarding and verified HTTPS, unchanged host routes/DNS,
+private-file/process cleanup, registry restoration and certificate revocation.
+Units cover denied profile directives, malformed DNS/status replies, package
+conflict guards, busy-slot refusal, admission reload ordering and cleanup races.
 
 Keep private profiles, keys, tokens and login files out of this public repository,
 chat, CI logs and artifacts. Source-only review bundles are reproducible from an

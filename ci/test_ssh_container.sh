@@ -20,6 +20,8 @@ docker cp ops/bootstrap_runner_key.py "$container:/test/ops/bootstrap_runner_key
 docker cp ops/server_diagnostics.py "$container:/test/ops/server_diagnostics.py"
 docker cp ops/prepare_test_access.py "$container:/test/ops/prepare_test_access.py"
 docker cp ops/inspect_test_peer.py "$container:/test/ops/inspect_test_peer.py"
+docker cp ops/external_vpn_test.py "$container:/test/ops/external_vpn_test.py"
+docker cp ops/peer_vpn_client.py "$container:/test/ops/peer_vpn_client.py"
 docker cp ops/server_foundation.py "$container:/test/ops/server_foundation.py"
 docker cp ops/configure_download.py "$container:/test/ops/configure_download.py"
 docker cp vpn-dashboard/safe_io.py "$container:/test/vpn-dashboard/safe_io.py"

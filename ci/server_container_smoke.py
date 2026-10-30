@@ -17,6 +17,7 @@ sys.path.insert(0,str(ROOT/'ops'))
 import server_foundation as foundation
 import server_selftest
 import server_diagnostics
+import external_vpn_test
 import device_admin
 sys.path.insert(0,str(ROOT/'ci'))
 import client_control_smoke
@@ -73,6 +74,7 @@ def main():
     if before!=[hashlib.sha256(p.read_bytes()).hexdigest() for p in (profile,login)]:
         raise SystemExit('Installer rerun changed existing client credentials.')
     foundation.run(['/usr/sbin/ip','route','replace','198.41.0.4/32','via',sys.argv[1]])
+    foundation.run(['/usr/sbin/ip','route','replace','93.184.216.34/32','via',sys.argv[1]])
     log=Path('/run/vpn-server-test.log')
     Path('/run/openvpn-server').mkdir(mode=0o700,exist_ok=True)
     with open(log,'wb') as output:
@@ -111,6 +113,19 @@ def main():
                     or any(value is None for value in diagnosis['input_counters'].values())):
                 raise RuntimeError('Read-only diagnostics did not match the real VPN and firewall baseline.')
             print('PASS: read-only server diagnostics observe actual private DNS, tunnel, listeners and empty forwarding lease.',flush=True)
+            PHASE='external peer VPN client'
+            external_vpn_test.PEER_LIBRARY_SOURCE=(ROOT/'ops/inspect_test_peer.py').read_text()
+            external_vpn_test.PEER_CLIENT_SOURCE=(ROOT/'ops/peer_vpn_client.py').read_text()
+            external=external_vpn_test.orchestrate(server=foundation,
+                host=os.environ['VPN_TEST_PEER_HOST'],port='22',
+                fingerprint=os.environ['VPN_TEST_PEER_HOST_FINGERPRINT'],server_host=endpoint)
+            print('::notice title=VPN lab external client fixture::'+json.dumps(external,sort_keys=True),flush=True)
+            if (external['failure'] is not None or not external['registry_restored']
+                    or not external['ephemeral_certificate_revoked'] or not external['test']
+                    or not external['test']['passed']):
+                raise RuntimeError('The external peer VPN client or its credential cleanup did not pass.')
+            print('PASS: separate-host TLS login, private DNS, Internet forwarding and HTTPS with namespace isolation and revoked test identity.',flush=True)
+            time.sleep(6)
             PHASE='live VPN packet and token tests'
             print(json.dumps(server_selftest.test(broker.pid),sort_keys=True),flush=True)
             PHASE='owned app supervisor'

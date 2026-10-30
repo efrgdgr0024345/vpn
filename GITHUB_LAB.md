@@ -12,6 +12,7 @@ lab droplet. The working Access Server is outside this workflow's scope.
 | `diagnose-connection` | Read service health, the VPN interface, DNS bindings, the single-device forwarding lease, two fixed firewall counters and clock synchronization; test the VPS resolver locally. No configuration or session changes. |
 | `prepare-test-access` | Create or verify a dedicated root-protected SSH test identity on the lab. Return its public key/fingerprint only; its private key stays on the lab. Requires matching build checks. |
 | `inspect-test-peer` | From the lab, verify an external test machine's supplied host fingerprint and inspect it using the dedicated test key. Fixed read-only inventory; no package, service or network changes. |
+| `test-from-peer` | Prepare the peer's client tools, then run a real external VPN connection, private DNS, public forwarding and verified HTTPS in its own network namespace. Uses a fresh temporary certificate and restores/revokes it afterward. Requires matching build checks. |
 | `install-foundation` | Provision the disposable Debian 13 OpenVPN foundation, replacing its firewall and retiring old runner services. |
 | `test-foundation` | Test the running VPN locally without exporting its credentials or changing host routes/DNS. |
 | `probe-udp` | Send a random non-secret UDP probe from the GitHub runner and observe its arrival on the lab's external interface. No VPN credentials are exported. |
@@ -105,6 +106,25 @@ never receives general command input. No extra GitHub secret is required.
 The private key remains on the lab, and peer inspection does not start a VPN,
 change the old Access Server or replace any routes, resolver or firewall rules.
 Actual external VPN packet acceptance is a separate test after this access step.
+
+`test-from-peer` installs only missing stock OpenVPN, slirp4netns and CA tools on
+the peer; it refuses an existing stock OpenVPN configuration before installing
+that client package. It neither upgrades/removes named packages nor changes the
+older Access Server's settings. The client runs in a fresh network namespace
+with userspace networking, preserving the host routes and resolver. A successful
+report requires login, private DNS, a public DNS forwarding roundtrip and
+certificate-verified HTTPS to an address resolved through the VPN's DNS.
+
+The lab signs a fresh client certificate and briefly substitutes it into the
+unused Android enrollment slot at `.249`, after refusing a busy VPN. The original
+registry is restored and the test certificate revoked; other root edits are
+preserved and reported as a failure. No existing Kali/mobile private key is sent.
+The test profile and shared VPN login pass directly from the lab to its pinned
+peer over SSH, never through the Actions runner or logs. They exist only in a
+root-private temporary directory on the peer, removed during cleanup. This is
+different from the loopback self-test, whose credentials never leave the lab.
+No password rotation, service restart or firewall flush is part of this test.
+OpenVPN 2.6+ uses userspace mode, so a pass does not validate Kali 2.7's DCO path.
 
 The gated `rotate-password` operation is independent root-only recovery for an
 exposed initial VPN password. It preflights the protected original/device copies,

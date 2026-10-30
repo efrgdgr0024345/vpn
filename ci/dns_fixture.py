@@ -23,7 +23,7 @@ with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
         if qtype==2:
             data=b'\x01a\x0croot-servers\x03net\0'
         elif qtype==1:
-            data=socket.inet_aton('203.0.113.7')
+            data=socket.inet_aton('93.184.216.34')
         else:
             response=query[:2]+struct.pack('!5H',0x8180,1,0,0,0)+question
             sock.sendto(response,peer)
