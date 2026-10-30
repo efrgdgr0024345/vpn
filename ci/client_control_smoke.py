@@ -31,6 +31,7 @@ def supervisor_with_real_openvpn():
              '--user','vpn-lab-transport','--group','vpn-lab-transport','--script-security','1',
              '--connect-retry','1','--connect-timeout','10','--connect-retry-max','3']
     command += transport.ipv4_options('udp')
+    command += transport.userspace_options(command[0])
     subprocess.run(['/usr/sbin/ip','tuntap','add','dev','tun-app-test','mode','tun'],check=True,timeout=5)
     subprocess.run(['/usr/sbin/ip','link','set','dev','tun-app-test','addrgenmode','none'],check=True,timeout=5)
     program=('import sys;sys.path.insert(0,'+repr(str(ROOT/'vpn-dashboard'))+');'

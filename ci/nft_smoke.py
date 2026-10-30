@@ -1,8 +1,11 @@
 """Exercise real nft JSON in a fresh network namespace, never the host ruleset."""
+from contextlib import nullcontext
+import fcntl
 import json
 import os
 from pathlib import Path
 import subprocess
+import stat
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -10,10 +13,14 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'vpn-dashboard'))
+sys.path.insert(0, str(ROOT / 'ops'))
 import firewall_policy
 import portal_helper
 import network_setup
 import vpn_session_helper
+import security
+import safe_io
+import upgrade_client_transport as upgrade
 from security import Refused
 
 
@@ -118,6 +125,132 @@ def private_dns_roundtrip(policy, uid):
     print('Real tun0-bound DNS answer, SERVFAIL, bounded timeout and route refusal passed under the guard.')
 
 
+def private_dhcp_refresh(policy, uid):
+    """Real protected writes and kernel checks; only the lease/account are fixtures."""
+    sys.path.insert(0, str(ROOT/'vpn-dashboard/tests'))
+    from test_security import PROFILE
+    policy = {**policy, 'dhcp_server_ipv4': '10.131.33.103'}
+    requested = '192.0.2.1'
+    # The DHCP identifier deliberately differs from the gateway. A guessed
+    # gateway value must not satisfy the explicit NetworkManager lease check.
+    command(['/usr/sbin/ip', 'link', 'add', 'wlan0', 'type', 'veth', 'peer', 'name', 'wifi-peer'])
+    command(['/usr/sbin/ip', 'link', 'set', 'wifi-peer', 'up'])
+    command(['/usr/sbin/ip', 'address', 'add', '192.0.2.48/24', 'dev', 'wlan0'])
+    command(['/usr/sbin/ip', 'link', 'set', 'wlan0', 'up'])
+    command(['/usr/sbin/ip', 'route', 'add', 'default', 'via', '192.0.2.254', 'dev', 'wlan0'])
+    lease = requested
+    def observed(argv, **kwargs):
+        if argv == ['/usr/bin/nmcli', '-g', 'DHCP4.OPTION', 'device', 'show', 'wlan0']:
+            return subprocess.CompletedProcess(argv, 0,
+                'dhcp_server_identifier = '+lease+' | routers = 192.0.2.254\n', '')
+        return safe_io.bounded_run(argv, **kwargs)
+    modules = SimpleNamespace(
+        security=SimpleNamespace(validate_policy=security.validate_policy,
+            validate_profile=security.validate_profile, service_account=lambda:SimpleNamespace(pw_uid=uid)),
+        firewall_policy=firewall_policy, portal_helper=portal_helper,
+        safe_io=SimpleNamespace(bounded_run=observed))
+    names = ('policy.json', 'client.ovpn', 'vpn-guard.candidate.json')
+    resolver = Path('/etc/resolv.conf').read_bytes()
+    routes = command(['/usr/sbin/ip', '-j', '-4', 'route', 'show', 'table', 'all'])
+    firewall = command(['/usr/sbin/nft', '-j', 'list', 'ruleset'])
+    with tempfile.TemporaryDirectory(prefix='vpn-dhcp-refresh-', dir='/run') as temporary:
+        directory = Path(temporary)
+        original = {'policy.json': (json.dumps(policy, indent=2)+'\n').encode(),
+                    'client.ovpn': PROFILE.replace('vpn.example.invalid', policy['server_name']).encode(),
+                    'vpn-guard.candidate.json': (json.dumps(firewall_policy.render_batch(policy, uid), indent=2)+'\n').encode()}
+        def reset():
+            for name, value in original.items():
+                (directory/name).write_bytes(value)
+                (directory/name).chmod(0o600)
+        def snapshot():
+            return {name:(directory/name).read_bytes() for name in names}
+        def metadata():
+            for name in names:
+                info = (directory/name).lstat()
+                if info.st_uid != 0 or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600:
+                    raise RuntimeError('DHCP refresh broadened private configuration access.')
+        def unchanged_network():
+            if (Path('/etc/resolv.conf').read_bytes() != resolver
+                    or command(['/usr/sbin/ip', '-j', '-4', 'route', 'show', 'table', 'all']) != routes
+                    or command(['/usr/sbin/nft', '-j', 'list', 'ruleset']) != firewall):
+                raise RuntimeError('The DHCP refresh changed live networking.')
+        reset()
+        with (directory/'action.lock').open('w') as lock, \
+                patch.object(upgrade, 'CONFIG', directory), \
+                patch.object(upgrade, 'installed_helpers', side_effect=lambda files:nullcontext(modules)):
+            os.fchmod(lock.fileno(), 0o600)
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # A gateway guess is rejected without touching the protected pair.
+            try:
+                upgrade.prepare_dhcp_refresh('192.0.2.254', {})
+            except upgrade.UpgradeError:
+                pass
+            else:
+                raise RuntimeError('A gateway guess replaced the explicit DHCP identifier.')
+            if snapshot() != original:
+                raise RuntimeError('A mismatched DHCP lease changed private settings.')
+            state = directory/'network-state.json'
+            state.write_text('{}\n')
+            state.chmod(0o600)
+            try:
+                try:
+                    upgrade.prepare_dhcp_refresh(requested, {})
+                except upgrade.UpgradeError:
+                    pass
+                else:
+                    raise RuntimeError('Saved active-network state did not block DHCP refresh.')
+            finally:
+                state.unlink()
+            if snapshot() != original:
+                raise RuntimeError('Saved network-state refusal changed private settings.')
+            command(['/usr/sbin/nft', '-j', '-f', '-'], json.dumps(firewall_policy.render_batch(policy, uid)))
+            active = command(['/usr/sbin/nft', '-j', 'list', 'ruleset'])
+            try:
+                try:
+                    upgrade.prepare_dhcp_refresh(requested, {})
+                except upgrade.UpgradeError:
+                    pass
+                else:
+                    raise RuntimeError('A live firewall guard did not block DHCP refresh.')
+                if snapshot() != original or command(['/usr/sbin/nft', '-j', 'list', 'ruleset']) != active:
+                    raise RuntimeError('A guard refusal changed protected files or firewall rules.')
+            finally:
+                command(['/usr/sbin/nft', 'delete', 'table', 'inet', 'vpn_guard'])
+            # Interrupt only the policy publication after the inert candidate
+            # was durably replaced. A fresh plan must recognize and resume it.
+            plan = upgrade.prepare_dhcp_refresh(requested, {})
+            publish = upgrade.publish_private
+            def interrupt(path, value):
+                if path.name == 'policy.json':
+                    raise OSError('fixture interrupted policy publication')
+                publish(path, value)
+            with patch.object(upgrade, 'publish_private', side_effect=interrupt):
+                try:
+                    upgrade.commit_dhcp_refresh(plan)
+                except OSError:
+                    pass
+                else:
+                    raise RuntimeError('The interruption fixture did not stop policy publication.')
+            if (directory/'policy.json').read_bytes() != original['policy.json'] or (directory/'vpn-guard.candidate.json').read_bytes() != plan['candidate']:
+                raise RuntimeError('DHCP refresh did not publish the candidate before committing policy.')
+            metadata()
+            unchanged_network()
+            upgrade.commit_dhcp_refresh(upgrade.prepare_dhcp_refresh(requested, {}))
+            target = {**policy, 'dhcp_server_ipv4': requested}
+            if (json.loads((directory/'policy.json').read_text()) != target
+                    or json.loads((directory/'vpn-guard.candidate.json').read_text()) != firewall_policy.render_batch(target, uid)
+                    or (directory/'client.ovpn').read_bytes() != original['client.ovpn']):
+                raise RuntimeError('The resumed DHCP-only refresh changed unrelated private settings.')
+            metadata()
+            unchanged_network()
+            before = snapshot()
+            upgrade.commit_dhcp_refresh(upgrade.prepare_dhcp_refresh(requested, {}))
+            if snapshot() != before:
+                raise RuntimeError('A same-lease DHCP refresh was not idempotent.')
+    command(['/usr/sbin/ip', 'link', 'delete', 'wlan0'])
+    print('Real private 0600 DHCP refresh, explicit lease checks, guard/state refusal and interrupted-pair recovery passed without networking changes.')
+
+
 def main():
     if os.geteuid() != 0:
         raise SystemExit('Run this CI check with sudo on a disposable Linux runner.')
@@ -190,6 +323,7 @@ def main():
             if any('table' in row for row in json.loads(command(['/usr/sbin/nft','-j','list','ruleset']))['nftables']):
                 raise SystemExit('The owned firewall was not released on explicit restore.')
     print('Real guard/private-DNS sequencing, repair and explicit restore passed with a private resolver fixture.')
+    private_dhcp_refresh(policy, uid)
     private_dns_roundtrip(policy, uid)
     return 0
 

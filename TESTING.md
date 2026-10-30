@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 168 desktop and 146 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 170 desktop and 153 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver
@@ -22,6 +22,12 @@ a valid answer, SERVFAIL and a three-second timeout under the real app guard,
 refuse missing/wrong tunnel routes without sending, and preserve the firewall.
 Unit regressions cover malformed DNS packets, CNAME chains, source/interface
 binding, one outstanding nonblocking probe and reconnect/stop generation fencing.
+Private DHCP refresh also runs against actual protected files and kernel routes/
+firewall in this namespace. It rejects a gateway guess, live guard and saved
+network state, preserves live networking, and resumes candidate-first interruption
+with `0600` files. The guided installer verifies cold imports from the protected
+installation. Userspace-version regressions cover 2.5/2.6/2.7 and refusal before
+network changes; the real supervised engine exercises the selected options.
 
 Separate digest-pinned Debian 13 containers exercise real OpenSSH/SFTP safeguards,
 certificates, PAM, OpenVPN, private DNS and NAT. VPN tests check competing owners,

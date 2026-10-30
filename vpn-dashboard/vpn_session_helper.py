@@ -36,6 +36,16 @@ def ipv4_options(protocol):
             '--redirect-gateway', 'def1']
 
 
+def userspace_options(executable):
+    """Use one explicit data path while diagnosing client compatibility."""
+    output = diagnostic([executable, '--version'], as_json=False)
+    version = (re.match(r'\AOpenVPN ([0-9]{1,3})\.([0-9]{1,3})(?:\.[0-9]{1,4})?(?=[ \t\r\n]|$)', output)
+               if isinstance(output, str) else None)
+    if version is None or tuple(map(int, version.groups())) < (2, 5):
+        raise portal_helper.Refused('OpenVPN 2.5 or later could not be verified; userspace compatibility was not configured.')
+    return ['--disable-dco'] if tuple(map(int, version.groups())) >= (2, 6) else []
+
+
 def openvpn_argv():
     policy = load_policy()
     validate_profile(read_trusted(PROFILE, private=True), policy)
@@ -44,7 +54,7 @@ def openvpn_argv():
     if not executable:
         raise portal_helper.Refused('OpenVPN is not installed.')
     return ([executable, '--config', str(PROFILE), '--auth-user-pass', '--auth-nocache']
-            + ipv4_options(policy['vpn_protocol']) + [
+            + ipv4_options(policy['vpn_protocol']) + userspace_options(executable) + [
             '--mssfix', '1300', '--script-security', '1',
             '--verb', '3',
             '--allow-compression', 'no', '--user', SERVICE_USER,
@@ -441,6 +451,7 @@ def main(owner_uid):
             except BlockingIOError:
                 raise portal_helper.Refused('Another VPN action or session is active; stop it before connecting.') from None
             command = prepare_session()
+            print('OpenVPN data path: userspace compatibility mode.', flush=True)
             print('Portal verified closed. Starting OpenVPN; shared action lock held until exit.', flush=True)
             # One more check after firewall validation. External root network
             # managers remain outside this lock's trust boundary.

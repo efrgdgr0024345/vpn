@@ -177,6 +177,17 @@ def main():
     for name in ('app.py','session_channel.py','session_ui.py'):
         if hashlib.sha256(Path('/opt/vpn-desk',name).read_bytes()).hexdigest()!=update_manifest['files'][name]:
             raise RuntimeError('The desktop logging modules did not match the reviewed bundle.')
+    # Load the real protected installation after source-module imports. This
+    # verifies the refresh loader does not reuse sibling/cached checkout code.
+    sys.path.insert(0,str(ROOT))
+    import upgrade_client_transport as checked_upgrade
+    recorded=json.loads(Path('/opt/vpn-desk/install-manifest.json').read_text())['files']
+    with checked_upgrade.installed_helpers(recorded) as installed:
+        policy=installed.security.load_policy()
+        installed.security.validate_profile(config.read_text(),policy)
+        uid=installed.security.service_account().pw_uid
+        if installed.firewall_policy.render_batch(policy,uid)!=json.loads(Path('/etc/vpn-desk/vpn-guard.candidate.json').read_text()):
+            raise RuntimeError('The protected private candidate did not match its installed renderer.')
     audit = ('import sys;sys.path.insert(0,"/opt/vpn-desk");import install_audit;'
              'raise SystemExit(0 if install_audit.check()["state"]=="matches_baseline" else 1)')
     subprocess.run(['/usr/bin/python3','-I','-B','-c',audit],check=True,timeout=10)

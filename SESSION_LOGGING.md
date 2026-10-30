@@ -1,5 +1,11 @@
 # Connection diagnostics
 
+The compatibility baseline uses the OpenVPN userspace data path: verified 2.6+
+engines receive `--disable-dco`; 2.5 already uses userspace. Unknown/older engines
+stop before any network preparation. This removes a variable when comparing
+the physical Kali client with external Ubuntu acceptance. It does not establish
+that DCO caused the reported DNS timeout, and does not disable host-wide IPv6.
+
 Use **Session log / audit** for connection troubleshooting. The main dashboard's
 **Copy safe log** is a redacted local OS snapshot; it does not explain the last
 OpenVPN handshake failure. The terminal and session viewer now show the actual

@@ -90,6 +90,7 @@ class SessionTests(unittest.TestCase):
                 patch.object(session, 'read_trusted', return_value='profile') as read, \
                 patch.object(session, 'validate_profile') as validate, \
                 patch.object(session, 'service_account', return_value=account), \
+                patch.object(session, 'diagnostic', return_value='OpenVPN 2.7.8 x86_64-pc-linux-gnu\n') as diagnostic, \
                 patch.object(session.Path, 'is_file', return_value=True):
             command = session.openvpn_argv()
         read.assert_called_once_with(PROFILE, private=True)
@@ -99,7 +100,38 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(command[command.index('--group') + 1], 'vpn-desk')
         self.assertEqual(command[command.index('--script-security') + 1], '1')
         self.assertIn('--auth-nocache', command)
+        self.assertEqual(command.count('--disable-dco'), 1)
+        diagnostic.assert_called_once_with(['/usr/sbin/openvpn', '--version'], as_json=False)
         self.assertEqual(command[command.index('--allow-compression') + 1], 'no')
+
+    def test_userspace_compatibility_options_follow_the_verified_engine_version(self):
+        for output, expected in (('OpenVPN 2.5.11 x86_64-linux-gnu\n', []),
+                                 ('OpenVPN 2.5\n', []),
+                                 ('OpenVPN 2.6.14 x86_64-linux-gnu\n', ['--disable-dco']),
+                                 ('OpenVPN 2.6\n', ['--disable-dco']),
+                                 ('OpenVPN 2.7.8 x86_64-pc-linux-gnu [DCO]\n', ['--disable-dco'])):
+            with patch.object(session, 'diagnostic', return_value=output) as diagnostic:
+                self.assertEqual(session.userspace_options('/usr/sbin/openvpn'), expected)
+                diagnostic.assert_called_once_with(['/usr/sbin/openvpn', '--version'], as_json=False)
+
+    def test_unknown_or_older_engine_refuses_before_network_changes_without_raw_output(self):
+        for output in (None, {}, '', 'PRIVATE VERSION OUTPUT', 'OpenVPN 2.4.12 PRIVATE',
+                       'OpenVPN 1.9 PRIVATE', 'OpenVPN 2.7.8_PRIVATE', 'OpenVPN 2.7.8.1 PRIVATE'):
+            with patch.object(session, 'load_policy', return_value={'vpn_protocol': 'udp'}), \
+                    patch.object(session, 'read_trusted', return_value='profile'), \
+                    patch.object(session, 'validate_profile'), patch.object(session, 'service_account'), \
+                    patch.object(session.Path, 'is_file', return_value=True), \
+                    patch.object(session.os, 'geteuid', return_value=0), \
+                    patch.object(session, 'diagnostic', return_value=output), \
+                    patch.object(session.network_setup, 'prepare') as prepare, \
+                    patch.object(session.portal_helper, 'check_network') as check_network, \
+                    patch.object(session.portal_helper, 'act') as act:
+                with self.assertRaises(portal_helper.Refused) as error:
+                    session.prepare_session()
+                self.assertNotIn('PRIVATE', str(error.exception))
+                prepare.assert_not_called()
+                check_network.assert_not_called()
+                act.assert_not_called()
 
     def test_ipv4_transport_replaces_combined_gateway_push_and_filters_ipv6_configuration(self):
         for protocol, transport in (('udp', 'udp4'), ('tcp-client', 'tcp4-client')):

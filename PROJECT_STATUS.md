@@ -1,5 +1,16 @@
 # Project history and current status
 
+## Current Kali update preparation
+
+The owner supplied fresh local evidence: kernel `7.1.5+kali-amd64`, OpenVPN
+`2.7.8`/OpenSSL `3.6.5`, and helper hash `fa613722...` matching the original
+installed code. The logging/IPv4 changes had not reached that laptop. Its
+explicit current DHCP server is `10.183.127.15`; normal DNS and the physical
+IPv4 route are present. An updated bundle now selects the userspace OpenVPN
+path for comparison and supports a narrow, independently lease-verified DHCP
+policy/candidate refresh. It does not identify DCO as the cause or install
+itself on Kali. Physical acceptance remains pending the checked update.
+
 ## External client acceptance — 30 October 2026
 
 [Live external acceptance 41007155855](https://github.com/efrgdgr0024345/vpn/actions/runs/41007155855)

@@ -88,3 +88,12 @@ nmcli -g DHCP4.OPTION device show wlan0 |
 Review changed lease/resolver details before updating protected policy or its
 firewall baseline. DNS health reporting does not implement automatic roaming
 or silently rewrite saved recovery ownership.
+
+The checked updater supports `--dhcp-server` for a reviewed lease change. It
+requires inactive VPN/guard state, the configured Wi-Fi/default IPv4 route and
+the same explicit NetworkManager DHCP identifier at preflight and commit. It
+changes only that policy field and the complete derived private candidate,
+publishing the inert candidate first and policy last with private `0600` modes.
+Unknown candidates are refused; the recognized interrupted pair can resume.
+Profiles, credentials and live routes/DNS/firewall are preserved. The update
+must not be used while saved app network state still requires restoration.
