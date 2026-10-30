@@ -11,7 +11,7 @@ Native phone apps and early-boot client enforcement are not implemented.
 using disposable GitHub-hosted runners and a read-only repository token. It needs
 no real profiles, passwords, SSH credentials or cloud-provider API token.
 
-The Ubuntu 22.04/24.04 jobs run 175 desktop and 176 lab/admin/security unit tests,
+The Ubuntu 22.04/24.04 jobs run 175 desktop and 177 lab/admin/security unit tests,
 actual Tk dashboard/log-window startup under Xvfb, and real nftables readback in
 a fresh network namespace. The kernel check rejects bypass rules and exercises
 the owned guard, resolver repair and explicit restoration with temporary resolver

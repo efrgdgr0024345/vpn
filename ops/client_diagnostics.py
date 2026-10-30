@@ -498,6 +498,15 @@ def new_report():
             'dns_match': None, 'confirmed': False, 'restore_withheld': 'preflight_unchanged'}}
 
 
+def session_failure(snapshot):
+    for row in snapshot['events']:
+        code = row['code']
+        if code in {'auth_failed','tls_failed','configuration_failed','route_failed',
+                    'server_timeout','handshake_timeout','startup_timeout','reconnecting'}:
+            return code
+    return 'session_failed' if snapshot['state'] == 'error' else None
+
+
 def run_test(owner, credential_path=None, *, restore_after_test=False):
     global _REPORT_CHANNEL
     _REPORT_CHANNEL = None
@@ -550,12 +559,9 @@ def run_test(owner, credential_path=None, *, restore_after_test=False):
                 report['session'] = snapshot
                 codes = [row['code'] for row in snapshot['events']]
                 proof = proof or {'guard_checked', 'dns_configured', 'credentials'} <= set(codes)
-                for code in codes:
-                    if code in OUTCOMES-{'success'} and code in {'auth_failed','tls_failed','configuration_failed',
-                            'route_failed','server_timeout','handshake_timeout','startup_timeout','reconnecting'}:
-                        raise DiagnosticError(code)
-                if snapshot['state'] == 'error':
-                    raise DiagnosticError('session_failed')
+                failure = session_failure(snapshot)
+                if failure is not None:
+                    raise DiagnosticError(failure)
                 if 'tunnel_ready' in codes and ready_at is None:
                     ready_at = time.monotonic()
             if process.poll() is not None:
@@ -596,11 +602,22 @@ def run_test(owner, credential_path=None, *, restore_after_test=False):
 
 def finish_test(report, modules, process, pidfd, owner, previous, proof, policy, baseline_dns=None):
     recovery = report['recovery']
-    recovery['ownership_proven'] = proof
     try:
+        # A transport failure may arrive while bounded DNS/HTTPS checks run.
+        # Sample the same authenticated child once more before stopping it.
+        snapshot = child_status(process.pid, owner, previous, modules)
+        if snapshot is not None:
+            report['session'] = snapshot
+            proof = proof or {'guard_checked','dns_configured','credentials'} <= {row['code'] for row in snapshot['events']}
+            failure = session_failure(snapshot)
+            if failure is not None and report['outcome'] == 'success':
+                report['outcome'] = failure
+        recovery['ownership_proven'] = proof
         stopped = stop_owned(process, pidfd, owner, previous, modules)
         recovery['child_stopped'] = stopped
         report['child_exit_status'] = process.returncode
+        if stopped and process.returncode != 0 and report['outcome'] == 'success':
+            report['outcome'] = 'session_failed'
         restore_owned(modules, proof, stopped, recovery)
         if not stopped:
             report['outcome'] = 'cleanup_failed'

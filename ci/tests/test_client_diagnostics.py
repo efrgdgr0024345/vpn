@@ -183,6 +183,29 @@ class BaselineTests(unittest.TestCase):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_late_session_failure_or_nonzero_exit_cannot_report_a_successful_test(self):
+        baseline = 'nameserver 192.0.2.1\n'
+        after = {'guard_present':False, 'state_present':False, 'routes':[]}
+        modules = {'portal_helper':SimpleNamespace(active_openvpn=lambda:False),
+                   'network_setup':SimpleNamespace(resolver_read=lambda:baseline)}
+        late = {'state':'error', 'events':[{'code':code} for code in
+                ('guard_checked','dns_configured','credentials','auth_failed')]}
+        for snapshot, exit_code, expected in ((None, 0, 'success'), (None, 1, 'session_failed'),
+                                               (late, 0, 'auth_failed')):
+            report = diagnostics.new_report()
+            report.update(outcome='success', before={'routes':[]})
+            process = SimpleNamespace(pid=1234, returncode=exit_code)
+            def restored(modules, proof, stopped, recovery):
+                recovery.update(restored=True, restore_attempted=True, restore_withheld='none')
+            with patch.object(diagnostics, 'child_status', return_value=snapshot), \
+                    patch.object(diagnostics, 'stop_owned', return_value=True), \
+                    patch.object(diagnostics, 'restore_owned', side_effect=restored), \
+                    patch.object(diagnostics, 'network_snapshot', return_value=after):
+                diagnostics.finish_test(report, modules, process, 99, 1000, None, True, {}, baseline)
+            self.assertEqual(report['outcome'], expected)
+            self.assertTrue(report['recovery']['confirmed'])
+            self.assertEqual(report['session'], snapshot)
+
     def test_timed_out_owned_child_is_signalled_only_by_pidfd_and_is_not_killed(self):
         process = Mock(pid=4321)
         process.poll.return_value = None
