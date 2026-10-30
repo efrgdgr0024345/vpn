@@ -1,6 +1,6 @@
 {
   "environment": "vpn-lab",
-  "stage": "external peer VPN login, private DNS, Internet forwarding and HTTPS verified; physical Kali diagnosis pending",
+  "stage": "VPS kernel IPv6 disabled and externally tested after reboot; physical Kali diagnostic passed; Kali persistent OS IPv6 setup/reboot pending",
   "deployed_source_commit": "8510966a90bab33e7f848f6f8c1c534969d576e3",
   "os": "Debian 13",
   "installation": "https://github.com/efrgdgr0024345/vpn/actions/runs/40500400489",
@@ -10,8 +10,7 @@
   "observed_post_reboot_uptime_seconds": 23,
   "github_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/40451196198",
   "unit_tests_per_ubuntu_job": 173,
-  "client_transfer": "Owner confirmed Kali profile/login downloaded with mode 0600 and verified server ED25519 fingerprint. Temporary download access closed; server export copies removed.",
-  "client_transfer_closure": "https://github.com/efrgdgr0024345/vpn/actions/runs/41007962125",
+  "client_transfer": "Owner privately downloaded/imported the current login and passed a physical Kali diagnostic. Latest read-only download grant remains temporary; see current_client_download.",
   "validated": [
     "private VPN-only recursive DNS answers; native Unbound service recovers after reboot",
     "native VPN and broker services recover automatically after reboot",
@@ -27,13 +26,15 @@
     "revoked device loses packet forwarding",
     "DNS roundtrip through encrypted VPN and IPv4 NAT",
     "private-network and cloud-metadata packet dropped",
-    "IPv6 client block response",
     "external UDP 1194 reaches the rebooted server",
     "forced delayed-broker replay/disconnect ordering preserves the original broker process and still denies replay forwarding",
-    "separate owner VPS completes IPv4 VPN login, private DNS, public forwarding and verified HTTPS with fresh certificate and confirmed cleanup"
+    "separate owner VPS completes IPv4 VPN login, private DNS, public forwarding and verified HTTPS with fresh certificate and confirmed cleanup",
+    "VPS persistent IPv4-only tunnel/firewall and kernel IPv6 disablement verified after reboot",
+    "external VPN/private DNS/IPv4 Internet/HTTPS after IPv6 disablement",
+    "owner physical Kali short diagnostic: VPN/private DNS/system DNS after startup repair/HTTPS and confirmed restoration"
   ],
   "not_yet_validated": [
-    "physical Kali OpenVPN 2.7 connection and resolver/firewall/DCO integration",
+    "physical Kali persistent OS IPv6 disablement after owner apply/reboot; sustained browser use",
     "client physical-interface IPv4/IPv6/DNS leak testing and network/suspend transitions",
     "client early-boot guard: not implemented",
     "owned native iPhone/Android applications: not implemented",
@@ -120,5 +121,14 @@
     "functional_checks": "https://github.com/efrgdgr0024345/vpn/actions/runs/41007113559",
     "security_checks": "https://github.com/efrgdgr0024345/vpn/actions/runs/41007113432",
     "limits": "This validates an external Ubuntu client, not Kali 2.7, its DCO driver, Wi-Fi, guard or DNS integration."
-  }
+  },
+  "ipv4_only_deployment_record": "deployments/ipv4-only.json",
+  "previous_client_transfer_closure": "https://github.com/efrgdgr0024345/vpn/actions/runs/41007962125",
+  "current_client_download": {
+    "authorization": "https://github.com/efrgdgr0024345/vpn/actions/runs/41016920628",
+    "expires_utc": "2026-10-31T06:55:44Z",
+    "scope": "read-only chrooted SFTP; current owner public key; no shell",
+    "closure_confirmed": false
+  },
+  "previous_ipv6_mode_validation": "A legacy client block response was exercised before the IPv4-only migration; it is not the current tunnel mode."
 }

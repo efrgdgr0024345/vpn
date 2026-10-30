@@ -6,10 +6,21 @@ The owner requires IPv6 disabled on the VPN server and persistently blocked on
 Kali, including before connection and after reboot. This is separate from the
 broader server lockdown and boot-image work currently deferred.
 
-The repository now includes a narrow server migration and a standalone Kali
-setup. Deployment is not established by these source changes: live server
-migration/reboot and the owner's Kali apply/reboot checks are separate evidence.
-The last physical Kali report still has `ipv6_kernel_disabled: false`.
+The VPS migration and reboot are complete. Live
+[post-reboot verification](https://github.com/efrgdgr0024345/vpn/actions/runs/41030851958)
+confirmed the active `ipv6.disable=1` boot argument, disabled kernel subsystem,
+unavailable IPv6 sockets, no IPv6 addresses/routes, all three firewall blocks,
+IPv4-only VPN settings and active VPN/broker/private-DNS services. The exact
+source passed all five functional jobs and security analysis before migration.
+[External acceptance](https://github.com/efrgdgr0024345/vpn/actions/runs/41030975757)
+then verified real login, private DNS, public IPv4 forwarding and HTTPS from the
+owner's older VPS, with cleanup confirmed. `deployments/ipv4-only.json` records
+the evidence. The original foundation,
+certificates and credentials were preserved; only the narrow migration was run.
+
+Kali still needs the owner to apply the checked setup below and reboot. Its last
+physical report has `ipv6_kernel_disabled: false`; the VPS result does not change
+the laptop. Broader lockdown and boot-image work remain deferred.
 
 The fixed GitHub Actions operation `enable-ipv4-only` accepts only the recognized
 lab configuration, refuses an active forwarding lease and preserves VPN
@@ -37,6 +48,39 @@ requires `kernel_ipv6_disabled: true`, `boot_parameter_active: true`,
 `persistence_installed: true`, `ipv6_address_count: 0`, and
 `reboot_required: false`. Files present before reboot are not proof that the
 running kernel has IPv6 disabled. Save the command offline before rebooting.
+
+## One-paste Kali command
+
+With the VPN stopped and normal networking restored, this downloads the public
+standalone setup at the immutable reviewed revision and checks its SHA256 before
+execution. It asks only for the local sudo password. It does not reboot or change
+DNS. Reboot normally when the report says `reboot_required: true`.
+
+```sh
+sudo -- /usr/bin/python3 -I -B - <<'PYCODE'
+import hashlib, os, resource, sys
+from urllib.request import urlopen
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+os.umask(0o077)
+os.chdir('/')
+os.environ.clear()
+os.environ.update(PATH='/usr/sbin:/usr/bin', LC_ALL='C')
+url = 'https://raw.githubusercontent.com/efrgdgr0024345/vpn/6005e47f03aa393e4ca4da399ad56ec18aba715f/ops/disable_client_ipv6.py'
+try:
+    source = urlopen(url, timeout=30).read(262145)
+except OSError:
+    raise SystemExit('Download failed; no setup executed.') from None
+if hashlib.sha256(source).hexdigest() != '2f6fd7f08075890e4480dc2422f750ea780c15e569aacfdef4ef3bb603568bb5':
+    raise SystemExit('Checksum mismatch; no setup executed.')
+sys.argv = ['checked-ipv6-setup']
+exec(compile(source, 'checked-ipv6-setup', 'exec'), {'__name__': '__main__'})
+PYCODE
+```
+
+After reboot, rerun the block with its `sys.argv` line changed to
+`sys.argv = ['checked-ipv6-setup', '--check']` and save the resulting status. The
+read-only check is safe to run while connected. Full completion still requires
+the kernel and boot checks described above; the server's state is independent.
 
 ## Prepared Kali configuration
 

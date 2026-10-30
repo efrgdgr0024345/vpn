@@ -1,0 +1,92 @@
+{
+  "external_acceptance": {
+    "verified_report": {
+      "credential_contents_returned": false,
+      "ephemeral_certificate_revoked": true,
+      "failure": null,
+      "peer_prepared": true,
+      "registry_restored": true,
+      "stage": "complete",
+      "test": {
+        "cleanup_confirmed": true,
+        "client_version": "2.6.19",
+        "error": null,
+        "handshake": true,
+        "host_dns_unchanged": true,
+        "host_routes_unchanged": true,
+        "https_status": "ok",
+        "mode": "test",
+        "namespace_isolated": true,
+        "packages_installed": false,
+        "passed": true,
+        "private_dns": {
+          "answers": 2,
+          "rcode": 0,
+          "status": "ok"
+        },
+        "public_dns": {
+          "answers": 13,
+          "rcode": 0,
+          "status": "ok"
+        },
+        "slirp_version": "1.2.1",
+        "stage": "complete",
+        "tools_ready": true,
+        "version": 1,
+        "vpn_failure": null
+      },
+      "version": 1
+    },
+    "workflow": "https://github.com/efrgdgr0024345/vpn/actions/runs/41030975757"
+  },
+  "functional_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/41030264714",
+  "kali": {
+    "apply_confirmed": false,
+    "last_report_kernel_ipv6_disabled": false,
+    "reboot_verified": false,
+    "setup_sha256": "2f6fd7f08075890e4480dc2422f750ea780c15e569aacfdef4ef3bb603568bb5",
+    "setup_source": "ops/disable_client_ipv6.py"
+  },
+  "local_integration": [
+    "real SSH and read-only chroot export",
+    "real legacy-to-IPv4 migration with unrelated nft table preserved",
+    "real VPN/private DNS/NAT/HTTPS and broker/session regressions",
+    "one-attempt client diagnostics and restore"
+  ],
+  "local_units": {
+    "administration": 209,
+    "client": 175
+  },
+  "migration": "https://github.com/efrgdgr0024345/vpn/actions/runs/41030507332",
+  "migration_source_commit": "6005e47f03aa393e4ca4da399ad56ec18aba715f",
+  "post_reboot_status": "https://github.com/efrgdgr0024345/vpn/actions/runs/41030851958",
+  "post_test_diagnosis": {
+    "authorization_element_count": 0,
+    "private_dns_status": "ok",
+    "services_active": true,
+    "workflow": "https://github.com/efrgdgr0024345/vpn/actions/runs/41031164957"
+  },
+  "preflight": "https://github.com/efrgdgr0024345/vpn/actions/runs/41030296951",
+  "private_material_returned": false,
+  "reboot": "https://github.com/efrgdgr0024345/vpn/actions/runs/41030757057",
+  "security_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/41030265042",
+  "unchanged_foundation_source_commit": "8510966a90bab33e7f848f6f8c1c534969d576e3",
+  "verified_vps_status": {
+    "boot_argument_active": true,
+    "boot_argument_configured": true,
+    "broker_service_active": true,
+    "credential_contents_returned": false,
+    "firewall_ipv6_blocked": true,
+    "interface_ipv6_disabled": true,
+    "ipv6_addresses_absent": true,
+    "ipv6_routes_absent": true,
+    "kernel_ipv6_disabled": true,
+    "operation": "ipv4-only-status",
+    "reboot_required": false,
+    "resolver_service_active": true,
+    "server_configuration_ipv4_only": true,
+    "server_service_active": true,
+    "version": 1
+  },
+  "version": 1
+}

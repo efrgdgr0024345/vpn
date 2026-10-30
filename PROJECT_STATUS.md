@@ -1,5 +1,29 @@
 # Project history and current status
 
+## IPv4-only VPS verified; Kali reboot pending — 30 October 2026
+
+Source `6005e47f03aa393e4ca4da399ad56ec18aba715f` passed all five functional jobs
+and security analysis. The narrow migration preserved the deployed foundation,
+PKI and credentials while removing IPv6 tunnel directives, adding early IPv6
+drops to all server firewall chains, and installing persistent interface and
+kernel-boot settings. It did not run the foundation installer again.
+
+[Post-reboot status 41030851958](https://github.com/efrgdgr0024345/vpn/actions/runs/41030851958)
+confirmed the active boot argument, disabled kernel IPv6 subsystem, unavailable
+IPv6 sockets, no IPv6 addresses/routes and healthy VPN/broker/private-DNS services.
+[External acceptance 41030975757](https://github.com/efrgdgr0024345/vpn/actions/runs/41030975757)
+then completed real VPN login, private DNS, public IPv4 forwarding and verified
+HTTPS from the owner's older VPS. Host routes/DNS were preserved; the temporary
+certificate was revoked and the device registry restored. Deployment evidence is
+in `deployments/ipv4-only.json`.
+
+Kali has not yet applied the standalone OS setup or supplied post-reboot proof.
+Its last successful short physical diagnostic still reports IPv6 enabled in the
+kernel. IPV4_ONLY.md supplies one checked paste for the known installed helper;
+full Kali disablement must be verified after the owner reboots. The app's normal
+network restore does not undo this separate OS preference. Broader server
+lockdown, code attestation and boot-image work remain deferred.
+
 ## Physical Kali acceptance — 30 October 2026
 
 The owner supplied a successful physical-client diagnostic report for source
