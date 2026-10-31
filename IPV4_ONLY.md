@@ -50,7 +50,57 @@ requires `kernel_ipv6_disabled: true`, `boot_parameter_active: true`,
 `reboot_required: false`. Files present before reboot are not proof that the
 running kernel has IPv6 disabled. Save the command offline before rebooting.
 
-## One-paste Kali command
+## Temporary connectivity test before permanent setup
+
+The owner selected a temporary test before changing boot settings. Run with normal
+Internet working, the VPN disconnected and its guard released. This changes only
+runtime interface IPv6 flags. It schedules and verifies a system restore timer
+before any IPv6 write; failure or an existing test-unit collision stops first.
+The timer runs independently of the terminal and restores the saved settings
+including per-interface differences after about 90 seconds while the machine is
+awake. Newly created interfaces use the saved default; vanished interfaces are
+skipped. A setup exception requests immediate restoration too.
+
+```sh
+sudo -- /usr/bin/python3 -I -B - <<'PYCODE'
+import hashlib, os, resource
+from urllib.request import urlopen
+resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+os.umask(0o077)
+os.chdir('/')
+os.environ.clear()
+os.environ.update(PATH='/usr/sbin:/usr/bin', LC_ALL='C')
+url = 'https://raw.githubusercontent.com/efrgdgr0024345/vpn/d49f434c824af44efd414e038889cd632de90e39/ops/temporary_client_ipv6.py'
+try:
+    source = urlopen(url, timeout=30).read(262145)
+except OSError:
+    raise SystemExit('Download failed; no test started.') from None
+if hashlib.sha256(source).hexdigest() != 'c54d066e33b6958fe01070e9e317e9118460eaa63fc9e89fa276306cbb8ed138':
+    raise SystemExit('Checksum mismatch; no test started.')
+exec(compile(source, 'checked-temporary-ipv6-test', 'exec'), {'__name__': '__main__'})
+PYCODE
+```
+
+Try browsing during the test. For an early restore, run this locally; it needs no
+Internet and cancels the remaining timer after restoration succeeds:
+
+```sh
+sudo systemctl start vpn-desk-ipv6-restore.service &&
+sudo systemctl stop vpn-desk-ipv6-restore.timer
+```
+
+The command does not edit GRUB or persistent sysctl configuration and requires no
+reboot. It refuses a kernel that already has IPv6 disabled. Avoid VPN Connect or
+the permanent setup during the test. Restoring flags does not instantly rebuild
+addresses/routes: RA, DAD and DHCPv6 can take additional time; Wi-Fi may need
+reconnecting. NetworkManager can also reenable IPv6 during an experiment; this is
+a connectivity test, not proof of a strict VPN-only policy or a packet leak test.
+No actual systemd timer was started on the user's laptop by repository tests:
+four targeted tests cover scheduling-before-write, failure-before-write, immediate
+recovery request, and restoration across interface additions/removals. The actual
+Kali timer must be active before the script proceeds.
+
+## Permanent Kali setup command
 
 With the VPN stopped and normal networking restored, this downloads the public
 standalone setup at the immutable reviewed revision and checks its SHA256 before
