@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import resource
+import shlex
 import stat
 import subprocess
 import sys
@@ -21,6 +22,7 @@ import tempfile
 SYSCTL = Path('/etc/sysctl.d/90-vpn-desk-ipv4-only.conf')
 GRUB = Path('/etc/default/grub.d/99-vpn-desk-ipv4-only.cfg')
 GRUB_BASE = Path('/etc/default/grub')
+GRUB_OUTPUT = Path('/boot/grub/grub.cfg')
 UPDATE_GRUB = Path('/usr/sbin/update-grub')
 STATE = Path('/etc/vpn-desk/network-state.json')
 LOCK = Path('/run/vpn-dashboard-portal.lock')
@@ -203,6 +205,32 @@ def kernel_text(path):
         return None
 
 
+def generated_boot_argument():
+    """Read back actual generated Linux entries without evaluating GRUB code.
+
+    A successful update-grub command and a saved drop-in alone do not establish
+    persistence: later defaults/drop-ins can remove or contradict our argument.
+    Physical boot still needs the separate active-command-line/kernel checks.
+    """
+    if not os.path.lexists(GRUB_OUTPUT):
+        return False
+    value = read_owned(GRUB_OUTPUT, limit=2_000_000).decode('utf-8')
+    entries = []
+    for line in value.splitlines():
+        words = line.lstrip().split(None, 1)
+        if not words or words[0] not in ('linux', 'linuxefi'):
+            continue
+        try:
+            fields = shlex.split(line, comments=True, posix=True)
+        except ValueError:
+            return False
+        if len(fields) < 3:
+            return False
+        settings = [field for field in fields[2:] if field.startswith('ipv6.disable=')]
+        entries.append(settings == ['ipv6.disable=1'])
+    return bool(entries) and all(entries)
+
+
 def status():
     module = kernel_text(MODULE_DISABLED)
     kernel_disabled = module in ('1', 'Y', 'y')
@@ -233,6 +261,7 @@ def status():
     persistence = all(os.path.lexists(path) and read_owned(path) == value
                       for path, value in ((SYSCTL, SYSCTL_CONTENT), (GRUB, GRUB_CONTENT)))
     return {'version': 1, 'persistence_installed': persistence,
+        'boot_argument_configured': persistence and generated_boot_argument(),
         'kernel_ipv6_disabled': kernel_disabled, 'boot_parameter_active': boot_disabled,
         'interface_ipv6_disabled': kernel_disabled or bool(values) and all(v == '1' for v in values),
         'ipv6_address_count': count,
@@ -264,6 +293,8 @@ def apply():
         publish(SYSCTL, SYSCTL_CONTENT)
         publish(GRUB, GRUB_CONTENT)
         run([str(UPDATE_GRUB)], timeout=120)
+        if not generated_boot_argument():
+            raise DisableError('Generated GRUB Linux entries do not consistently disable IPv6; review boot configuration before rebooting.')
         require_inactive()
         run(['/usr/sbin/sysctl', '-p', str(SYSCTL)])
         result = status()

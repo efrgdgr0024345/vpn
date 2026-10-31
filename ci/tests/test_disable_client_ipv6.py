@@ -26,6 +26,9 @@ class DisableClientIPv6Tests(unittest.TestCase):
                 path.mkdir(parents=True, exist_ok=True)
             base = root/'default'/'grub'
             base.write_text('GRUB_CMDLINE_LINUX="existing=preserved"\n')
+            output = root/'boot'/'grub'/'grub.cfg'
+            output.parent.mkdir(parents=True)
+            output.write_text('linux /vmlinuz root=/dev/fixture quiet\n')
             program = root/'update-grub'
             program.write_text('#!/bin/sh\nexit 0\n')
             program.chmod(0o755)
@@ -35,7 +38,8 @@ class DisableClientIPv6Tests(unittest.TestCase):
             for name in ('all', 'default'):
                 (root/'conf'/name/'disable_ipv6').write_text('0\n')
             values = {'SYSCTL': sysctl, 'GRUB': grub, 'GRUB_BASE': base,
-                'UPDATE_GRUB': program, 'STATE': root/'network-state.json', 'LOCK': root/'action.lock',
+                'UPDATE_GRUB': program, 'GRUB_OUTPUT': output,
+                'STATE': root/'network-state.json', 'LOCK': root/'action.lock',
                 'PROC': root/'proc', 'IPV6_CONF': root/'conf', 'MODULE_DISABLED': root/'module-disable',
                 'HELPER': helper, 'IPV4_CAPABLE_HELPER': hashlib.sha256(helper.read_bytes()).hexdigest()}
             for name, value in values.items():
@@ -56,6 +60,8 @@ class DisableClientIPv6Tests(unittest.TestCase):
                     return b'[{"dst":"default","gateway":"10.0.0.1","dev":"wlan0"}]'
                 if argv[:4] == ['/usr/sbin/ip', '-j', '-6', 'address']:
                     return b'[]'
+                if argv == [str(program)]:
+                    output.write_text('linux /vmlinuz root=/dev/fixture quiet ipv6.disable=1\n')
                 if argv[:2] == ['/usr/sbin/sysctl', '-p']:
                     for name in ('all', 'default'):
                         (root/'conf'/name/'disable_ipv6').write_text('1\n')
@@ -84,6 +90,7 @@ class DisableClientIPv6Tests(unittest.TestCase):
             self.assertEqual(disable.SYSCTL.read_bytes(), disable.SYSCTL_CONTENT)
             self.assertEqual(disable.GRUB.read_bytes(), disable.GRUB_CONTENT)
             self.assertTrue(result['interface_ipv6_disabled'])
+            self.assertTrue(result['boot_argument_configured'])
             self.assertTrue(result['reboot_required'])
             self.assertFalse(result['kernel_ipv6_disabled'])
             self.assertEqual(stat.S_IMODE(disable.GRUB.stat().st_mode), 0o644)
@@ -185,6 +192,56 @@ class DisableClientIPv6Tests(unittest.TestCase):
             self.assertEqual(disable.SYSCTL.read_bytes(), disable.SYSCTL_CONTENT)
             self.assertFalse(disable.status()['interface_ipv6_disabled'])
             self.assertTrue(disable.apply()['interface_ipv6_disabled'])
+
+    def test_generated_grub_requires_every_linux_entry_to_disable_ipv6(self):
+        cases = [
+            ('linux /vmlinuz root=/dev/fixture ipv6.disable=1\n', True),
+            ('\tlinuxefi /vmlinuz root=/dev/fixture "ipv6.disable=1"\n', True),
+            ('linux /one ipv6.disable=1\n linuxefi /two ipv6.disable=1\n', True),
+            ('# linux /not-an-entry ipv6.disable=0\nlinux /vmlinuz ipv6.disable=1\n', True),
+            ('linux /one ipv6.disable=1\nlinux /two quiet\n', False),
+            ('linux /vmlinuz ipv6.disable=1 ipv6.disable=0\n', False),
+            ('linux /vmlinuz ipv6.disable=0 ipv6.disable=1\n', False),
+            ('linux /vmlinuz ipv6.disable=1 ipv6.disable=1\n', False),
+            ('linux /vmlinuz ipv6.disable=yes\n', False),
+            ('linux /vmlinuz other="ipv6.disable=1"\n', False),
+            ('linux /vmlinuz "unterminated\n', False),
+            ('# no Linux boot entries\n', False),
+        ]
+        with self.fixture():
+            for value, expected in cases:
+                with self.subTest(value=value):
+                    disable.GRUB_OUTPUT.write_text(value)
+                    self.assertEqual(disable.generated_boot_argument(), expected)
+            disable.GRUB_OUTPUT.unlink()
+            self.assertFalse(disable.generated_boot_argument())
+
+    def test_missing_or_overridden_generated_boot_argument_stops_before_sysctl(self):
+        for generated in (None, 'linux /vmlinuz quiet\n',
+                          'linux /vmlinuz ipv6.disable=1 ipv6.disable=0\n'):
+            with self.subTest(generated=generated), self.fixture() as (_, calls):
+                original = disable.run
+                def command(argv, timeout=10):
+                    if argv == [str(disable.UPDATE_GRUB)]:
+                        if generated is None:
+                            disable.GRUB_OUTPUT.unlink()
+                        else:
+                            disable.GRUB_OUTPUT.write_text(generated)
+                        return b''
+                    return original(argv, timeout=timeout)
+                with patch.object(disable, 'run', side_effect=command):
+                    with self.assertRaisesRegex(disable.DisableError, 'Generated GRUB'):
+                        disable.apply()
+                self.assertNotIn(['/usr/sbin/sysctl', '-p', str(disable.SYSCTL)], calls)
+                self.assertFalse(disable.status()['boot_argument_configured'])
+
+    def test_saved_dropins_do_not_replace_generated_boot_proof(self):
+        with self.fixture():
+            disable.SYSCTL.write_bytes(disable.SYSCTL_CONTENT)
+            disable.GRUB.write_bytes(disable.GRUB_CONTENT)
+            result = disable.status()
+            self.assertTrue(result['persistence_installed'])
+            self.assertFalse(result['boot_argument_configured'])
 
     def test_post_reboot_check_requires_boot_argument_and_module_disable(self):
         with self.fixture() as (root, _):
