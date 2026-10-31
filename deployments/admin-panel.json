@@ -1,0 +1,27 @@
+{
+  "browser_helper": {
+    "global_certificate_trust_changed": false,
+    "path": "ops/open_admin_panel.py",
+    "sha256": "838318138ae83eaec95c8ce2d0bdc618b7c60cf33a5ecba68283428e9b9eaa24"
+  },
+  "creates_additional_vpn_slot": false,
+  "functional_checks": "https://github.com/efrgdgr0024345/vpn/actions/runs/41173374364",
+  "installed_on_vps": false,
+  "local_tests": {
+    "administration_and_security": 292,
+    "browser": "synthetic Chromium desktop/mobile smoke passed",
+    "desktop": 175,
+    "nss": "real isolated certificate import and trust repair passed",
+    "real_vpn_integration": "passed; systemd lifecycle emulated in disposable containers"
+  },
+  "mode": "read-only",
+  "private_material_published": false,
+  "rejected_ssh_check": "https://github.com/efrgdgr0024345/vpn/actions/runs/41171990373",
+  "required_owner_action": "Renew the existing GitHub SSH grant in the provider root console.",
+  "security_checks": "https://github.com/efrgdgr0024345/vpn/actions/runs/41173374405",
+  "source_commit": "13d406eec36d7bda99611f6ebb23f91803377a26",
+  "stage": "Implementation and checks complete; live installation blocked by rejected temporary SSH authorization.",
+  "target_url": "https://172.27.240.1:8443",
+  "version": 1,
+  "vpn_session_limit": 1
+}

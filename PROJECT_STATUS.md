@@ -2,6 +2,10 @@
 
 ## VPN-only read-only admin panel implementation — 31 October 2026
 
+Published source `13d406eec36d7bda99611f6ebb23f91803377a26` passed all five
+functional GitHub jobs and security analysis. `deployments/admin-panel.json`
+records the exact checks and the still-blocked live deployment.
+
 The first panel implementation provides service/private-DNS health, device policy,
 IPv6 observations and bounded activity over a separate authenticated HTTPS view.
 It binds only to the private VPN address, runs the web process without root or
