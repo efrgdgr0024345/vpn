@@ -1,5 +1,19 @@
 # Project history and current status
 
+## Kali kernel IPv6 disablement confirmed; browsing reported working — 31 October 2026
+
+The owner supplied successful permanent-setup output, then after reboot supplied
+`1` from `/sys/module/ipv6/parameters/disable` and `ipv6.disable=1` from the active
+kernel command line. This establishes owner-reported running-kernel disablement
+and supersedes earlier pending Kali apply/reboot notes. A separate IPv6 socket
+probe was not supplied, and the post-reboot kernel version was not reported.
+
+The owner then ran the reviewed saved-login connection command and reports that
+browsing appears to work. Keep that session open while checking its actual public
+IPv4 route, direct private DNS query and certificate-verified HTTPS bound to tun0.
+This is not yet a post-reboot packet-leak, roaming, crash or sustained-session
+acceptance result. No server change or additional lockdown was applied.
+
 ## Physical temporary IPv6 test reported successful — 31 October 2026
 
 The owner reports that browsing worked during the temporary IPv6-off experiment

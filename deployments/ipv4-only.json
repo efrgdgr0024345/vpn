@@ -41,10 +41,16 @@
   },
   "functional_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/41030264714",
   "kali": {
-    "apply_confirmed": false,
+    "apply_confirmed": true,
     "generated_grub_readback_required": true,
-    "last_report_kernel_ipv6_disabled": false,
-    "reboot_verified": false,
+    "last_report_kernel_ipv6_disabled": true,
+    "post_reboot_evidence": {
+      "active_boot_argument": "ipv6.disable=1",
+      "module_disable_value": "1",
+      "socket_test_performed": false,
+      "source": "Owner-pasted local command output"
+    },
+    "reboot_verified": true,
     "reported_boot_mode": "Owner describes safe mode with multiple Kali boot versions; installed/recovery/live classification pending.",
     "setup_sha256": "6354432caff7256460c1d37a1c035286e69caa2d2769986cc0ade9cecaebc01e",
     "setup_source": "ops/disable_client_ipv6.py",
@@ -54,6 +60,10 @@
       "owner_reported_public_ipv6_address_absent": true,
       "owner_reported_success": true,
       "source_commit": "d49f434c824af44efd414e038889cd632de90e39"
+    },
+    "vpn_browsing": {
+      "owner_reported_working": true,
+      "post_reboot_route_dns_https_checks_pending": true
     }
   },
   "local_integration": [

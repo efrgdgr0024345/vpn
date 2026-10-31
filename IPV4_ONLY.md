@@ -18,9 +18,11 @@ owner's older VPS, with cleanup confirmed. `deployments/ipv4-only.json` records
 the evidence. The original foundation,
 certificates and credentials were preserved; only the narrow migration was run.
 
-Kali still needs the owner to apply the checked setup below and reboot. Its last
-physical report has `ipv6_kernel_disabled: false`; the VPS result does not change
-the laptop. Broader lockdown and boot-image work remain deferred.
+The owner has now applied the Kali setup and supplied post-reboot output showing
+module disable value `1` and active boot argument `ipv6.disable=1`. The owner also
+reports browsing working after the saved-login VPN connection. Direct post-reboot
+tunnel/DNS/HTTPS checks and broader packet-leak acceptance remain separate.
+Broader lockdown and boot-image work remain deferred.
 
 The fixed GitHub Actions operation `enable-ipv4-only` accepts only the recognized
 lab configuration, refuses an active forwarding lease and preserves VPN
