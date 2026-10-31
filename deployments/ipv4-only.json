@@ -42,10 +42,12 @@
   "functional_ci": "https://github.com/efrgdgr0024345/vpn/actions/runs/41030264714",
   "kali": {
     "apply_confirmed": false,
+    "generated_grub_readback_required": true,
     "last_report_kernel_ipv6_disabled": false,
     "reboot_verified": false,
-    "setup_sha256": "2f6fd7f08075890e4480dc2422f750ea780c15e569aacfdef4ef3bb603568bb5",
-    "setup_source": "ops/disable_client_ipv6.py"
+    "setup_sha256": "6354432caff7256460c1d37a1c035286e69caa2d2769986cc0ade9cecaebc01e",
+    "setup_source": "ops/disable_client_ipv6.py",
+    "setup_source_commit": "3623cbf5b4dff97028d8c08508c33cb9b0ec0de8"
   },
   "local_integration": [
     "real SSH and read-only chroot export",

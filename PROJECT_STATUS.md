@@ -1,5 +1,22 @@
 # Project history and current status
 
+## Kali setup logic review — 31 October 2026
+
+A focused source review found that the Kali IPv6 setup checked saved drop-ins and
+`update-grub` success without checking the generated boot entries. Corrected
+source `3623cbf5b4dff97028d8c08508c33cb9b0ec0de8` now validates each generated
+Linux/LinuxEFI entry before sysctl changes and reports boot configuration
+separately from file presence. Conflicting, missing or malformed settings stop
+setup. All 212 administration/security and 175 desktop unit tests passed locally,
+including 17 dedicated setup tests. IPV4_ONLY.md pins the corrected standalone
+source and checksum; the unsafe unconditional-copy alternative was removed.
+
+No new confirmed authentication/forwarding bypass was found in the scoped source
+review. SECURITY_REVIEW.md records the remaining exportable-key, privileged
+administration, endpoint/root trust and early-boot IPv4 guard gaps. These limits
+are not resolved by token renewal or IPv6 disablement. No new VPS change was
+made, and Kali apply/reboot remains unconfirmed.
+
 ## IPv4-only VPS verified; Kali reboot pending — 30 October 2026
 
 Source `6005e47f03aa393e4ca4da399ad56ec18aba715f` passed all five functional jobs

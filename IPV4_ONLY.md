@@ -45,7 +45,8 @@ and reports whether a reboot is required. It does not reboot the laptop.
 
 After a normal reboot, run the same verified script with `--check`. Completion
 requires `kernel_ipv6_disabled: true`, `boot_parameter_active: true`,
-`persistence_installed: true`, `ipv6_address_count: 0`, and
+`persistence_installed: true`, `boot_argument_configured: true`,
+`ipv6_address_count: 0`, and
 `reboot_required: false`. Files present before reboot are not proof that the
 running kernel has IPv6 disabled. Save the command offline before rebooting.
 
@@ -65,12 +66,12 @@ os.umask(0o077)
 os.chdir('/')
 os.environ.clear()
 os.environ.update(PATH='/usr/sbin:/usr/bin', LC_ALL='C')
-url = 'https://raw.githubusercontent.com/efrgdgr0024345/vpn/6005e47f03aa393e4ca4da399ad56ec18aba715f/ops/disable_client_ipv6.py'
+url = 'https://raw.githubusercontent.com/efrgdgr0024345/vpn/3623cbf5b4dff97028d8c08508c33cb9b0ec0de8/ops/disable_client_ipv6.py'
 try:
     source = urlopen(url, timeout=30).read(262145)
 except OSError:
     raise SystemExit('Download failed; no setup executed.') from None
-if hashlib.sha256(source).hexdigest() != '2f6fd7f08075890e4480dc2422f750ea780c15e569aacfdef4ef3bb603568bb5':
+if hashlib.sha256(source).hexdigest() != '6354432caff7256460c1d37a1c035286e69caa2d2769986cc0ade9cecaebc01e':
     raise SystemExit('Checksum mismatch; no setup executed.')
 sys.argv = ['checked-ipv6-setup']
 exec(compile(source, 'checked-ipv6-setup', 'exec'), {'__name__': '__main__'})
@@ -115,30 +116,17 @@ offline and verify IPv4 connectivity before applying them. The boot step below
 requires `/usr/sbin/update-grub` and `/etc/default/grub` on the actual machine;
 other bootloaders need their own equivalent configuration.
 
-The two public configuration files are tracked under `deployments/kali/`.
-Keep an independently verified source copy/hash. If either destination already
-exists with different content, preserve it and review the conflict first.
-Run from the reviewed repository root, with no active VPN and after restoring
-normal networking:
+The two fixed public configuration files are tracked under `deployments/kali/`.
+Use the checked standalone command above to install them. It preserves a differing
+existing file and stops for review. It also reads back the generated
+`/boot/grub/grub.cfg`: every recognized Linux/LinuxEFI entry must contain one
+`ipv6.disable=1`, with no conflicting value, before immediate sysctl changes.
+A successful `update-grub` exit status or two saved drop-ins alone is insufficient.
 
-```sh
-test -x /usr/sbin/update-grub && test -f /etc/default/grub
-sudo test ! -e /etc/vpn-desk/network-state.json
-sudo install -d -o root -g root -m 755 /etc/default/grub.d
-sudo install -o root -g root -m 644 deployments/kali/90-vpn-desk-ipv4-only.conf \
-  /etc/sysctl.d/90-vpn-desk-ipv4-only.conf
-sudo install -o root -g root -m 644 deployments/kali/99-vpn-desk-ipv4-only.cfg \
-  /etc/default/grub.d/99-vpn-desk-ipv4-only.cfg
-sudo update-grub
-sudo sysctl -p /etc/sysctl.d/90-vpn-desk-ipv4-only.conf
-ip -6 address show
-```
-
-Run these in order and stop on any error. The sysctl settings disable current
-and future interfaces immediately. The kernel argument takes effect after a
-normal reboot and prevents userspace network managers re-enabling IPv6. It is
-appended without replacing existing kernel arguments. Until reboot, a network
-manager/root action can still change interface sysctls; verify after reconnects.
+The sysctls disable current and future interfaces immediately. A normal reboot
+activates the kernel argument and prevents userspace managers re-enabling IPv6.
+The post-reboot check is still required because generated GRUB entries alone do
+not prove which bootloader the firmware used. Save the instructions offline.
 
 After reboot, verify `grep -o 'ipv6.disable=1' /proc/cmdline` reports the argument
 and `ip -6 address show` lists no IPv6 addresses. A sysctl value of 1 alone does

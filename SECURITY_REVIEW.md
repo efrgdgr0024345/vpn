@@ -1,5 +1,42 @@
 # Security hardening implemented
 
+## Setup and access-logic review, 31 October 2026
+
+This was a focused source review of the Kali IPv6 setup/bootstrap, the broker
+admission/lease logic, credential provisioning and the client guard lifecycle.
+It did not perform a new live penetration test, inspect Kali, verify current SSH
+key expiry or verify owner-only GitHub protections. The existing live VPS boot
+and external acceptance records remain in `deployments/ipv4-only.json`.
+
+**Corrected: generated boot settings were not checked.** The Kali setup previously
+accepted a successful `update-grub` exit and saved drop-ins without reading the
+actual generated boot entries. Other GRUB settings could remove or contradict
+IPv6 disablement. The setup now validates every recognized generated Linux/LinuxEFI
+entry before applying sysctls and exposes `boot_argument_configured` separately.
+Missing, conflicting and malformed entries stop setup. Seventeen targeted tests
+cover normal, conflicting, partial-install and failure cases. A real Kali reboot
+still must establish that the firmware selected this configuration. The old
+unconditional file-copy recipe has been removed in favor of the checked setup.
+
+No new confirmed authentication or forwarding bypass was found in the inspected
+paths. Admission requires initial PAM authentication plus the enrolled certificate
+pin/name, is bound to OpenVPN's client ID, and grants no forwarding while pending.
+That result does not establish the absence of vulnerabilities in the OS, OpenVPN
+or paths outside this limited review.
+
+Remaining priorities, with broader live lockdown still deferred:
+
+| Priority | Evidence and implication | Next hardening direction |
+| --- | --- | --- |
+| High: administrative authority | `ops/bootstrap_runner_key.py` uses `restrict` and a 24-hour expiry without a forced command. While valid, the key can execute arbitrary root commands. Normal CI gates do not constrain a compromised maintainer. | Protect GitHub/provider accounts with hardware MFA; replace standing general root deployment authority with independently approved, narrowly authorized maintenance. |
+| High: exportable device identity | `ops/server_foundation.py` generates exportable keys and profiles; the diagnostic imports protected copies without deleting the originals. Malware with access to a current profile/login pair can clone it and claim the slot when free. | After acceptance, retire unnecessary copies and issue device-generated keys; use hardware protection where supported. Do not embed shared secrets in a public boot image. |
+| High: trusted endpoints and root | The root broker retains NET_ADMIN. Malware on an approved endpoint can use the active session; root can replace code, logs and local manifests. | Harden and patch endpoints, separate privileged responsibilities, and retain independently verified releases. A server-reported hash is not root-resistant attestation. |
+| Unfinished containment | `vpn-dashboard/network_setup.py` enables the guard at Connect. IPv6 disablement does not enforce an IPv4 VPN-only policy before Connect or after reboot. | Build and physically test the planned early-boot guard, explicit recovery and roaming/crash behavior. |
+
+The current design renews standard session tokens every 120 seconds; it does not
+rotate usernames/passwords or defeat malware through rapid handoff. Static secret
+rotation does not remove an attacker already controlling an approved device.
+
 ## Owned-client follow-up review, 27 October 2026
 
 The reviewed runtime source is `8510966a90bab33e7f848f6f8c1c534969d576e3`.
