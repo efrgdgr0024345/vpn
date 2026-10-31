@@ -150,6 +150,20 @@ class PanelInstallationTests(unittest.TestCase):
         self.assertEqual(path.read_text(), '# changed locally\n')
         self.assertFalse(any(argv[0] == '/usr/bin/systemctl' for argv, _ in self.commands))
 
+    def test_known_status_only_manifest_upgrades_but_unrelated_new_file_is_preserved(self):
+        panel.install(self.sources,self.revision)
+        record=json.loads(panel.MANIFEST.read_text())
+        added=(panel.CODE/'history.py',panel.CODE/'observer.py',panel.UNITS/'vpn-lab-admin-observer.service')
+        for path in added:
+            record['files'].pop(str(path));path.unlink()
+        self.write(panel.MANIFEST,json.dumps(record))
+        self.write(panel.CODE/'observer.py','# unrelated code\n')
+        with self.assertRaises(server.SetupError): panel.install(self.sources,'b'*40)
+        self.assertEqual((panel.CODE/'observer.py').read_text(),'# unrelated code\n')
+        (panel.CODE/'observer.py').unlink()
+        panel.install(self.sources,'b'*40)
+        self.assertTrue(all(path.is_file() for path in added))
+
     def test_known_partial_source_update_resumes_without_replacing_unknown_files(self):
         panel.install(self.sources, self.revision)
         changed = {**self.sources, 'server.py': '# next approved public source\n'}
@@ -171,6 +185,15 @@ class PanelInstallationTests(unittest.TestCase):
                         {**report, 'ca_certificate_pem': '-----BEGIN PRIVATE KEY-----\nPRIVATE\n-----END PRIVATE KEY-----\n'}):
             with self.assertRaises(ValueError):
                 panel.validate_report(changed)
+
+    def test_observer_is_separate_from_web_and_cannot_open_ip_sockets(self):
+        units=panel.service_units()
+        observer=units['vpn-lab-admin-observer.service']
+        self.assertIn('CapabilityBoundingSet=CAP_NET_RAW\n',observer)
+        self.assertIn('RestrictAddressFamilies=AF_PACKET AF_UNIX\n',observer)
+        self.assertIn('ReadWritePaths=/var/lib/vpn-lab-admin\n',observer)
+        self.assertIn('ProtectSystem=strict\n',observer)
+        self.assertNotIn('CAP_NET_RAW',units['vpn-lab-admin.service'])
 
     def test_sandbox_restricts_web_and_preserves_collector_runtime_ownership(self):
         units = panel.service_units()

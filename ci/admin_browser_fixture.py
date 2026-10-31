@@ -86,6 +86,27 @@ class FixtureHandler(BaseHTTPRequestHandler):
         if route == '/api/status':
             self.respond(*self.server.status())
             return
+        if route == '/api/history':
+            with self.server.state_lock:
+                authenticated = self.server.state['authenticated']
+            if not authenticated:
+                self.respond(401, {'error':'authentication_required'})
+                return
+            self.respond(200, {'version':1,'available':True,'collector_running':True,
+                'retention_days':30,'storage_cap_bytes':67108864,'record_cap':100000,
+                'record_count':2,'evicted_records':0,'socket_drops':0,'dns_stream_gaps':0,
+                'queue_drops':0,'capture_starts':1,'next_before':None,'records':[
+                {'id':2,'kind':'dns','device':'kali','source_ip':'172.27.240.10',
+                 'destination_ip':'172.27.240.1','source_port':30000,'destination_port':53,
+                 'protocol':'udp','domain':'example.com','query_type':1,
+                 'first_seen':'2026-10-31T10:00:00Z','last_seen':'2026-10-31T10:00:00Z',
+                 'outbound_bytes':0,'reply_bytes':0,'reply_observed':False},
+                {'id':1,'kind':'flow','device':'kali','source_ip':'172.27.240.10',
+                 'destination_ip':'203.0.113.7','source_port':30001,'destination_port':443,
+                 'protocol':'tcp','domain':None,'query_type':None,
+                 'first_seen':'2026-10-31T09:59:00Z','last_seen':'2026-10-31T10:00:00Z',
+                 'outbound_bytes':64,'reply_bytes':128,'reply_observed':True}]})
+            return
         asset = ASSETS.get(route)
         if asset is None:
             self.respond(404, {'error': 'fixture_route_not_found'})

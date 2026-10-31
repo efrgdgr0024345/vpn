@@ -14,9 +14,12 @@ connection and requires a separate administrator password.
 - Sampled forwarding authorization for the single permitted VPN address.
 - Server kernel IPv6-disablement observations.
 - Bounded, typed service/authorization changes observed since collection started.
+- Searchable private destination-IP/port and plaintext DNS-query metadata, with
+  device address, first/last timestamps, protocol and reply-observed status.
 
 This is not a raw journal viewer or a complete intrusion log. Short events between
-samples may be missed; history is in memory and resets with the collector. Stale
+samples may be missed; service-change history is in memory and resets with the
+status collector. Network history is separately persisted as described below. Stale
 or unavailable observations become unknown. A sampled authorization badge expires
 using its remaining kernel lease and the full observation age; it is not proof
 of physical device identity or continuous traffic forwarding.
@@ -29,7 +32,8 @@ controls should follow the status view. No extra simultaneous VPN slot is added.
 
 `vpn-admin/server.py` runs as the dedicated nonlogin `vpn-lab-admin` account with
 no capabilities. It reads only protected application configuration, its password
-verifier/leaf TLS key/public certificate and a validated public status snapshot.
+verifier/leaf TLS key/public certificate and a validated public status snapshot, plus read-only access to the private
+network-metadata database.
 It never imports root administration helpers, reads VPN credentials, accesses the
 OpenVPN management socket, or executes a command supplied by an HTTP request.
 
@@ -45,7 +49,48 @@ host-drop rule: authorized source on `tun-lab`, destination `172.27.240.1`, TCP
 the live ruleset, changes VPN credentials/PKI, or restarts OpenVPN, its broker or
 Unbound. It verifies those daemon identities remain unchanged. A future full
 foundation reinstall refuses an installed panel until its firewall is reviewed.
-Only the two panel services are enabled/restarted.
+Only the three panel services are enabled/restarted.
+
+## Network history and retention
+
+The owner chose **30 days with a storage cap**. The separate observer passively
+reads IPv4 packets on `tun-lab` using an AF_PACKET socket. It records source and
+destination addresses/ports, protocol, byte counts and timestamps; plaintext DNS
+questions additionally record domain and numeric query type. Packet bodies are
+parsed transiently for DNS and are never written to storage. The observer has
+`CAP_NET_RAW`; the web process has no capabilities, no packet socket and no
+write access to history. The observer is a trusted privileged component, not a
+sandbox that can safely execute arbitrary code. Its allowed socket families are
+AF_PACKET/AF_UNIX, and its filesystem writes are confined to its state directory.
+
+History lives at `/var/lib/vpn-lab-admin/history.sqlite3` (root:panel, 0640,
+directory 0750). It has a 30 MiB SQLite main-file limit, rollback-journal headroom
+within a **64 MiB storage budget**, and a 100,000-record cap. Old records are
+pruned automatically; capacity may remove them before 30 days. Freed SQLite
+pages are reused; this is logical deletion, not forensic erasure from disk,
+snapshots or provider backups. Collection begins on installation. Restarts are
+counted, and socket drops, queue drops and DNS stream gaps are reported. A fresh
+heartbeat confirms the observer loop, not complete capture of every packet.
+The writer still prunes when the tunnel is absent; an offline server prunes
+when it next starts. If logging is stopped, its retention task is also stopped.
+
+The authenticated `/api/history` endpoint supports device, record type,
+domain/IP-prefix, date and cursor filters with bounded parameterized queries.
+The table uses browser-local time and explicitly names its timezone; the API
+uses UTC timestamps. Page size is at most 200 and the browser retains at most
+1,000 displayed rows. History is not included in GitHub reports, workflow
+artifacts, source, request logs, or the public status snapshot.
+
+**These are observations, not complete website-visit history.** HTTPS conceals
+paths, page contents and credentials. Encrypted DNS, caches, tunnels and proxies
+limit domain visibility. DNS queries do not prove visits, and domains are not
+guessed from shared destination IPs. IPv4 fragments and incomplete/out-of-order
+TCP DNS streams may not be fully parsed. UDP/TCP destination records say
+“outbound attempt” or “reply observed”; capture may see an attempt before a
+firewall drops it, and a reply does not prove a successful application request.
+Device labels map configured VPN addresses and do not attest physical hardware.
+The panel's own TCP 8443 polling is excluded. Raw packet contents, full URLs,
+HTTP headers and TLS secrets are never persisted.
 
 ## Web authentication
 

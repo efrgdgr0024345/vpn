@@ -220,6 +220,30 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         return headers['Set-Cookie'].split(';', 1)[0], json.loads(body)['csrf_token'], headers
 
+    def test_history_requires_auth_and_rejects_duplicate_filters(self):
+        calls=[]
+        self.app.history_reader=lambda parameters: calls.append(parameters) or {'version':1,'available':True,'records':[]}
+        with self.assertRaises(panel.HTTPError) as error:
+            self.request('GET','/api/history')
+        self.assertEqual(error.exception.status,401)
+        self.assertEqual(calls,[])
+        cookie,_,_=self.login()
+        headers={'cookie':cookie}
+        status,body,_=self.request('GET','/api/history?device=kali&search=example.com',headers=headers)
+        self.assertEqual(status,200)
+        self.assertEqual(calls,[{'device':'kali','search':'example.com'}])
+        with self.assertRaises(panel.HTTPError) as error:
+            self.request('GET','/api/history?device=kali&device=android',headers=headers)
+        self.assertEqual(error.exception.status,400)
+
+    def test_history_storage_failure_does_not_disclose_sql_or_private_paths(self):
+        cookie,_,_=self.login()
+        def unavailable(parameters): raise RuntimeError('PRIVATE SQL failure')
+        self.app.history_reader=unavailable
+        status,body,_=self.request('GET','/api/history',headers={'cookie':cookie})
+        self.assertEqual(json.loads(body),{'version':1,'available':False})
+        self.assertEqual(status,200)
+
     def test_cookie_flags_and_success_response_do_not_disclose_verifier(self):
         cookie, csrf, headers = self.login()
         for flag in ('Path=/', 'Secure', 'HttpOnly', 'SameSite=Strict', 'Max-Age=3600'):

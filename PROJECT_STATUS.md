@@ -1,5 +1,22 @@
 # Project history and current status
 
+## Private network history extension — 31 October 2026
+
+The owner selected 30-day retention with a storage cap. The panel extension adds
+an authenticated, searchable destination-IP/port and plaintext DNS-query table,
+UTC API timestamps displayed in the browser timezone, and explicit attempt/reply
+labels. HTTPS URLs/content are not collected; DNS queries are not proof of visits.
+A separate bounded AF_PACKET observer stores root-owned SQLite metadata with a
+30 MiB main-file limit, rollback-journal headroom within 64 MiB, and 100,000 rows.
+Capacity can remove records earlier. No browsing records enter GitHub reports.
+
+Unit checks and synthetic browser checks pass. The disposable real-VPN panel
+phase verifies actual captured DNS/destination records, history authentication,
+self-polling exclusion, and unchanged VPN processes/credentials. Broader VPN
+regressions and exact-revision GitHub gates are recorded after completion.
+Deployment remains pending renewal of the rejected temporary SSH authorization;
+this entry does not claim installation or live history collection.
+
 ## VPN-only read-only admin panel implementation — 31 October 2026
 
 Published source `13d406eec36d7bda99611f6ebb23f91803377a26` passed all five

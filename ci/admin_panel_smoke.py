@@ -14,6 +14,7 @@ import select
 import signal
 import socket
 import ssl
+import struct
 import subprocess
 import sys
 import tempfile
@@ -140,6 +141,30 @@ def client():
                 raise RuntimeError('The panel did not display the real authorized VPN session.')
             if password.encode() in body or b'BEGIN PRIVATE' in body or b'SESS_ID_' in body:
                 raise RuntimeError('The public panel snapshot exposed credential material.')
+            if https('GET', '/api/history')[0] != 401:
+                raise RuntimeError('Private history did not require authentication.')
+            # This fixture ignores redirect-gateway to preserve its control path.
+            # Route the synthetic destination explicitly through the VPN.
+            command(['/usr/sbin/ip','route','add','198.51.100.99/32','dev','tun0'])
+            # Synthetic DNS and destination attempts traverse the actual VPN.
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                probe.sendto(struct.pack('!6H', 1234, 256, 1, 0, 0, 0)
+                    +b'\x07example\x03com\x00\x00\x01\x00\x01', ('172.27.240.1', 53))
+                probe.sendto(b'synthetic fixture', ('198.51.100.99', 443))
+            deadline=time.monotonic()+10
+            while True:
+                status, _, body = https('GET', '/api/history?device=kali', headers=authenticated)
+                history=json.loads(body)
+                rows=history.get('records', [])
+                if (status==200 and history.get('collector_running')
+                        and any(row['kind']=='dns' and row['domain']=='example.com' for row in rows)
+                        and any(row['kind']=='flow' and row['destination_ip']=='198.51.100.99' for row in rows)):
+                    break
+                if time.monotonic()>=deadline:
+                    raise RuntimeError('Private metadata history missed real VPN test packets.')
+                time.sleep(.2)
+            if any(row['destination_port']==8443 for row in rows):
+                raise RuntimeError('Private history captured its own polling traffic.')
             status, _, ca = https('GET', '/ca.crt')
             if status != 200 or ca != Path('/etc/vpn-lab-admin/ca.crt').read_bytes():
                 raise RuntimeError('The public panel CA did not match the checked trust anchor.')
@@ -188,8 +213,8 @@ def run(daemons):
                         os.killpg(process.pid, signal.SIGTERM)
                         process.wait(timeout=5)
                 account = pwd.getpwnam(installer.USER)
-                for name, filename in zip(installer.PANEL_UNITS, ('collector.py', 'server.py')):
-                    extra = {} if filename == 'collector.py' else {'user': account.pw_uid, 'group': account.pw_gid, 'extra_groups': []}
+                for name, filename in zip(installer.PANEL_UNITS, ('collector.py', 'server.py', 'observer.py')):
+                    extra = {} if filename in ('collector.py', 'observer.py') else {'user': account.pw_uid, 'group': account.pw_gid, 'extra_groups': []}
                     panel_processes[name] = subprocess.Popen(['/usr/bin/python3', '-I', '-B', str(installer.CODE/filename)],
                         stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT, start_new_session=True, **extra)
                 return ''
@@ -277,7 +302,10 @@ def run(daemons):
                 time.sleep(.2)
             child.stdin.write('finish\n')
             child.stdin.flush()
-            if receive(child) != 'PASS private panel HTTPS and authentication':
+            completion = receive(child)
+            if completion != 'PASS private panel HTTPS and authentication':
+                if completion.startswith('FAIL ') and re.fullmatch(r'[A-Za-z0-9 ,/_.()\-]{1,150}', completion[5:]):
+                    raise RuntimeError(completion[5:])
                 raise RuntimeError('The private panel test did not finish cleanly.')
             child.wait(timeout=10)
             if child.returncode or counter() <= before_counter:

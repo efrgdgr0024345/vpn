@@ -24,6 +24,10 @@
   let authorizationTimer = null;
   let lastRenderedCurrent = false;
   let deviceBadges = [];
+  let historyController = null;
+  let historyBefore = null;
+  let historyLoaded = false;
+  let historyParameters = new URLSearchParams();
 
   const services = [
     { unit: 'openvpn-server@vpn-lab.service', name: 'OpenVPN', description: 'Encrypted VPN transport', icon: '⌁' },
@@ -107,6 +111,12 @@
     signingOut = false;
     csrfToken = '';
     lastStatus = null;
+    if (historyController) historyController.abort();
+    historyLoaded = false;
+    historyBefore = null;
+    $('history-rows').replaceChildren();
+    $('history-more').hidden = true;
+    text('history-status', 'History has not been loaded.');
     signoutFailure = false;
     stopPolling();
     consoleView.hidden = true;
@@ -348,6 +358,7 @@
       lastStatus = status;
       statusReceivedAt = startedAt;
       render(status);
+      if (!historyLoaded) { historyLoaded = true; fetchHistory(); }
     } catch (error) {
       if (version !== generation || document.hidden || statusController !== controller) return;
       if (initial && !signedIn) showLogin('Console status is unavailable. Sign in to try again.');
@@ -425,6 +436,69 @@
       window.clearTimeout(timeout);
     }
   });
+
+  async function fetchHistory(older = false) {
+    if (!signedIn || signingOut) return;
+    if (historyController) historyController.abort();
+    const controller = new AbortController();
+    historyController = controller;
+    const version = generation;
+    const parameters = new URLSearchParams(historyParameters);
+    if (older && historyBefore) parameters.set('before', String(historyBefore));
+    const timeout = window.setTimeout(() => controller.abort(), requestTimeout);
+    $('history-more').disabled = true;
+    text('history-status', 'Loading private history…');
+    try {
+      const response = await fetch(`/api/history?${parameters}`, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+      if (version !== generation || signingOut) return;
+      if (response.status === 401) { showLogin('Your session has ended. Sign in again.'); return; }
+      if (!response.ok) throw new Error('Unavailable');
+      const value = await response.json();
+      if (version !== generation || controller.signal.aborted || signingOut) return;
+      if (value.version !== 1 || value.available !== true || !Array.isArray(value.records) || value.records.length > 200) throw new Error('Unavailable');
+      if (!older) $('history-rows').replaceChildren();
+      for (const row of value.records) {
+        const tr = element('tr');
+        const times = element('td', '', timestamp(row.first_seen, true));
+        times.append(element('small', '', timestamp(row.last_seen, true)));
+        const destination = element('td', 'mono', row.kind === 'dns' ? row.domain : row.destination_ip);
+        if (row.kind === 'dns') destination.append(element('small', '', `Resolver ${row.destination_ip} · query type ${row.query_type}`));
+        const observation = row.kind === 'dns' ? 'DNS query observed' : row.reply_observed ? 'Reply observed' : 'Outbound attempt';
+        tr.append(times, element('td', '', deviceNames[row.device] || 'Unknown'), destination,
+          element('td', 'mono', `${row.protocol.toUpperCase()}${row.destination_port !== null ? ':' + row.destination_port : ''}`), element('td', '', observation));
+        $('history-rows').append(tr);
+      }
+      historyBefore = Number.isSafeInteger(value.next_before) ? value.next_before : null;
+      $('history-more').hidden = !historyBefore;
+      // Bound the DOM as well as each API page. Search again to return to newest.
+      while ($('history-rows').children.length > 1000) $('history-rows').firstChild.remove();
+      const gaps = value.socket_drops + value.dns_stream_gaps + value.queue_drops;
+      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      text('history-status', `${value.collector_running ? 'Collector reporting' : 'Collector not currently confirmed'} · ${value.record_count} retained records · ${value.evicted_records} removed for capacity · ${gaps} capture drops / DNS stream gaps · ${value.capture_starts} collector starts. Times: ${zone}. ${value.records.length ? '' : 'No matching records.'}`);
+    } catch (error) {
+      if (version === generation && historyController === controller && !signingOut) text('history-status', 'History could not be refreshed. Displayed rows are previous observations. Check filters or retry.');
+    } finally {
+      window.clearTimeout(timeout);
+      if (historyController === controller) { historyController = null; $('history-more').disabled = false; }
+    }
+  }
+
+  $('history-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const selected = new URLSearchParams();
+    for (const key of ['kind', 'device', 'search']) {
+      const value = $(`history-${key}`).value.trim();
+      if (value) selected.set(key, value);
+    }
+    for (const key of ['from', 'to']) {
+      const value = $(`history-${key}`).value;
+      if (value) selected.set(key, new Date(value).toISOString());
+    }
+    historyParameters = selected;
+    historyBefore = null;
+    fetchHistory();
+  });
+  $('history-more').addEventListener('click', () => fetchHistory(true));
 
   refreshButton.addEventListener('click', () => fetchStatus());
   document.addEventListener('visibilitychange', () => {

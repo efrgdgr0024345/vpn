@@ -511,7 +511,7 @@ class ConnectionTests(unittest.TestCase):
         public_der = b'panel public CA fixture'
         public_pem = '-----BEGIN CERTIFICATE-----\n'+base64.b64encode(public_der).decode()+'\n-----END CERTIFICATE-----\n'
         report = {'version': 1, 'source_commit': revision, 'panel_url': 'https://172.27.240.1:8443',
-            'web_service_active': True, 'collector_service_active': True,
+            'web_service_active': True, 'collector_service_active': True, 'history_service_active': True,
             'vpn_runtime_preserved': True, 'firewall_rule_verified': True,
             'vpn_only_listener': True, 'credential_contents_returned': False,
             'ca_certificate_sha256': hashlib.sha256(public_der).hexdigest(),
@@ -537,7 +537,7 @@ class ConnectionTests(unittest.TestCase):
         public_der = b'panel public CA fixture'
         public_pem = '-----BEGIN CERTIFICATE-----\n'+base64.b64encode(public_der).decode()+'\n-----END CERTIFICATE-----\n'
         report = {'version': 1, 'source_commit': 'b'*40, 'panel_url': 'https://172.27.240.1:8443',
-            'web_service_active': True, 'collector_service_active': True,
+            'web_service_active': True, 'collector_service_active': True, 'history_service_active': True,
             'vpn_runtime_preserved': True, 'firewall_rule_verified': True,
             'vpn_only_listener': True, 'credential_contents_returned': False,
             'ca_certificate_sha256': hashlib.sha256(public_der).hexdigest(),

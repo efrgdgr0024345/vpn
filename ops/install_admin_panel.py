@@ -38,19 +38,19 @@ VPN_CONFIG = Path('/etc/openvpn/server/vpn-lab.conf')
 MANIFEST = CONFIG/'install-manifest.json'
 UNITS = Path('/etc/systemd/system')
 COMMENT = 'vpn-lab-admin'
-SOURCE_FILES = frozenset(('server.py', 'schema.py', 'collector.py', 'server_diagnostics.py',
+SOURCE_FILES = frozenset(('server.py', 'schema.py', 'collector.py', 'server_diagnostics.py', 'history.py', 'observer.py',
                           'static/index.html', 'static/app.js', 'static/style.css'))
 PRESERVED_UNITS = ('openvpn-server@vpn-lab.service', 'vpn-lab-broker.service', 'unbound.service')
-PANEL_UNITS = ('vpn-lab-admin-collector.service', 'vpn-lab-admin.service')
+PANEL_UNITS = ('vpn-lab-admin-collector.service', 'vpn-lab-admin.service', 'vpn-lab-admin-observer.service')
 URL = 'https://172.27.240.1:8443'
 RULE = ('  iifname "tun-lab" ip saddr @authorized ip daddr 172.27.240.1 '
         'tcp dport 8443 counter accept comment "vpn-lab-admin"\n')
 HOST_DROP = '  iifname "tun-lab" counter drop comment "vpn-lab-block-host"\n'
 STAGE = 'preflight'
 REPORT_FIELDS = frozenset(('version', 'source_commit', 'panel_url', 'web_service_active',
-    'collector_service_active', 'vpn_runtime_preserved', 'firewall_rule_verified',
+    'collector_service_active', 'history_service_active', 'vpn_runtime_preserved', 'firewall_rule_verified',
     'vpn_only_listener', 'credential_contents_returned', 'ca_certificate_sha256', 'ca_certificate_pem', 'leaf_spki_pin'))
-BOOL_FIELDS = frozenset(('web_service_active', 'collector_service_active', 'vpn_runtime_preserved',
+BOOL_FIELDS = frozenset(('web_service_active', 'collector_service_active', 'history_service_active', 'vpn_runtime_preserved',
                         'firewall_rule_verified', 'vpn_only_listener', 'credential_contents_returned'))
 
 
@@ -193,7 +193,27 @@ InaccessiblePaths=-/etc/shadow -/etc/gshadow -/etc/openvpn/lab/pki -/etc/openvpn
 [Install]
 WantedBy=multi-user.target
 '''
-    return dict(zip(PANEL_UNITS, (collector, web)))
+    observer = '''[Unit]
+Description=Private VPN destination and DNS metadata observer
+After=openvpn-server@vpn-lab.service
+
+[Service]
+Type=simple
+User=root
+Group=vpn-lab-admin
+WorkingDirectory=/
+ExecStart=/usr/bin/python3 -I -B /opt/vpn-lab-admin/observer.py
+StateDirectory=vpn-lab-admin
+StateDirectoryMode=0750
+ReadWritePaths=/var/lib/vpn-lab-admin
+CapabilityBoundingSet=CAP_NET_RAW
+RestrictAddressFamilies=AF_PACKET AF_UNIX
+InaccessiblePaths=-/etc/shadow -/etc/gshadow -/etc/openvpn/lab/pki -/etc/openvpn/lab/tls-crypt.key -/etc/openvpn/server -/etc/vpn-lab-admin -/run/vpn-lab-admin
+'''+common+'''
+[Install]
+WantedBy=multi-user.target
+'''
+    return dict(zip(PANEL_UNITS, (collector, web, observer)))
 
 
 def ipv4_firewall(value):
@@ -455,11 +475,16 @@ def preflight_files(values):
     old = owned(MANIFEST, missing=True)
     if old is not None:
         record = json.loads(old)
+        legacy_paths = set(values)-{str(CODE/'history.py'),str(CODE/'observer.py'),str(UNITS/'vpn-lab-admin-observer.service')}
         if (not isinstance(record, dict) or set(record) != {'version', 'source_commit', 'files'}
                 or record['version'] != 1 or not re.fullmatch(r'[0-9a-f]{40}', record['source_commit'])
-                or not isinstance(record['files'], dict) or set(record['files']) != set(values)
+                or not isinstance(record['files'], dict) or set(record['files']) not in (set(values),legacy_paths)
                 or any(not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest) for digest in record['files'].values())):
             raise server.SetupError('The previous panel manifest is unrecognized.')
+        for path in set(values)-set(record['files']):
+            current = owned(path, missing=True)
+            if current not in (None,values[path]):
+                raise server.SetupError('An added panel file differs; preserved.')
         for path, digest in record['files'].items():
             current = owned(path, missing=True)
             candidate = hashlib.sha256(values[path].encode()).hexdigest()
@@ -580,7 +605,7 @@ def install(sources, revision):
         if not verified or not preserved or not all(active):
             raise server.SetupError('Panel post-install verification failed.')
         return validate_report({'version': 1, 'source_commit': revision, 'panel_url': URL,
-            'web_service_active': active[1], 'collector_service_active': active[0],
+            'web_service_active': active[1], 'collector_service_active': active[0], 'history_service_active': active[2],
             'vpn_runtime_preserved': preserved, 'firewall_rule_verified': verified,
             'vpn_only_listener': True, 'credential_contents_returned': False,
             'ca_certificate_sha256': ca_digest, 'ca_certificate_pem': ca_public, 'leaf_spki_pin': spki})

@@ -205,7 +205,7 @@ def execute(operation, environment, run=bounded_run):
         if not re.fullmatch(r'[0-9a-f]{40}', revision):
             raise LabError('Panel installation requires an exact source revision.')
         sources = {name: (ROOT/'vpn-admin'/name).read_text() for name in (
-            'server.py', 'schema.py', 'collector.py', 'static/index.html', 'static/app.js', 'static/style.css')}
+            'server.py', 'schema.py', 'collector.py', 'history.py', 'observer.py', 'static/index.html', 'static/app.js', 'static/style.css')}
         sources['server_diagnostics.py'] = (ROOT/'ops/server_diagnostics.py').read_text()
         program = ('ADMIN_SOURCES = '+repr(sources)+'\nSOURCE_REVISION = '+repr(revision)+'\n'
                    +(ROOT/'ops/install_admin_panel.py').read_text())
@@ -432,7 +432,7 @@ def execute(operation, environment, run=bounded_run):
             # visible while ensuring failed packet tests/cleanup fail the job.
             raise LabError('External VPN test failed at '+report['stage']+'; see the validated report.')
         if operation == 'install-admin-panel' and not all(report[key] for key in (
-                'web_service_active', 'collector_service_active', 'vpn_runtime_preserved',
+                'web_service_active', 'collector_service_active', 'history_service_active', 'vpn_runtime_preserved',
                 'firewall_rule_verified', 'vpn_only_listener')):
             raise LabError('Panel installation did not pass every live verification; see the validated report.')
     print('Lab '+operation+' completed; runner key file removed.')

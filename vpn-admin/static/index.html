@@ -36,6 +36,7 @@
       <nav class="navigation">
         <a class="nav-link active" href="#overview"><span class="nav-icon" aria-hidden="true">▦</span> Overview</a>
         <a class="nav-link" href="#devices"><span class="nav-icon" aria-hidden="true">▯</span> Device access</a>
+        <a class="nav-link" href="#history"><span class="nav-icon" aria-hidden="true">↗</span> Network history</a>
         <a class="nav-link" href="#activity"><span class="nav-icon" aria-hidden="true">≋</span> Activity</a>
       </nav>
       <div class="sidebar-foot"><span class="small-dot muted-dot" aria-hidden="true"></span><div>Single-session VPN<small>One forwarding grant at a time</small></div></div>
@@ -71,6 +72,23 @@
             <p class="panel-caption">A forwarding grant identifies an authorized VPN address. It does not attest the physical device.</p>
           </section>
         </div>
+
+        <section class="panel history-panel" id="history" aria-labelledby="history-title">
+          <div class="panel-heading"><div><h2 id="history-title">Network history</h2><p>Observed DNS queries and destination connections through this VPN.</p></div></div>
+          <p class="panel-caption">HTTPS hides full URLs and page contents. A DNS lookup is not proof of a visit; encrypted DNS, caches and proxies limit domain visibility. Attempts may be blocked. Device names identify registered VPN addresses.</p>
+          <form id="history-form" class="history-filters">
+            <label>Record type<select id="history-kind"><option value="all">All records</option><option value="dns">DNS queries</option><option value="flow">Connections</option></select></label>
+            <label>Device<select id="history-device"><option value="all">All devices</option><option value="kali">Kali</option><option value="iphone">iPhone</option><option value="android">Android</option></select></label>
+            <label>Domain / IP prefix<input id="history-search" type="search" maxlength="253" placeholder="example.com or 203.0.113"></label>
+            <label>From<input id="history-from" type="datetime-local"></label>
+            <label>To<input id="history-to" type="datetime-local"></label>
+            <button class="button button-secondary" type="submit">Search / refresh</button>
+          </form>
+          <p id="history-status" class="panel-caption" role="status">History has not been loaded.</p>
+          <div class="history-scroll"><table class="history-table"><thead><tr><th>First / last observed</th><th>Device</th><th>Domain / destination</th><th>Transport</th><th>Observation</th></tr></thead><tbody id="history-rows"></tbody></table></div>
+          <button id="history-more" class="button button-quiet" type="button" hidden>Load older records</button>
+          <p class="panel-caption">Retained for up to 30 days, with a 64 MiB storage budget and 100,000-record cap. Older records may be removed sooner. Collection begins when installed; no earlier history is reconstructed.</p>
+        </section>
 
         <section class="panel activity-panel" id="activity" aria-labelledby="activity-title">
           <div class="panel-heading"><div><h2 id="activity-title">Recent activity</h2><p>Service and access changes observed by the server.</p></div><span class="section-icon" aria-hidden="true">≋</span></div>

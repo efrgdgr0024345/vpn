@@ -106,6 +106,14 @@ async function main() {
     assert.equal(await page.locator('#grant-value').textContent(), '1');
     assert.equal(await page.locator('#device-list .badge').first().textContent(), 'Forwarding');
     assert.equal(await page.locator('#admin-password').inputValue(), '');
+    await page.waitForFunction(() => document.querySelector('#history-rows').children.length === 2);
+    assert.match(await page.locator('#history-status').textContent(), /Collector reporting/);
+    assert.match(await page.locator('#history-rows').textContent(), /example.com/);
+    assert.match(await page.locator('#history-rows').textContent(), /203.0.113.7/);
+    await page.locator('#history-search').fill('example.com');
+    await page.locator('#history-form button').click();
+    await page.waitForFunction(() => document.querySelector('#history-status').textContent.includes('Collector reporting'));
+    assert(requests.some((url) => url.includes('/api/history?') && url.includes('search=example.com')));
     await screenshot('overview-synthetic.png');
 
     await control({ expires_ms: null });

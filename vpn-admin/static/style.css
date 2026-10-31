@@ -1185,3 +1185,15 @@ h1,h2,p {
     animation:none!important
   }
 }
+
+.history-panel { margin-top: 24px; }
+.history-filters { display:flex; flex-wrap:wrap; gap:12px; align-items:end; padding:20px 24px; }
+.history-filters label { display:flex; flex-direction:column; gap:8px; font-size:12px; color:var(--muted, #aab9ca); }
+.history-filters input, .history-filters select { color:#e8eef5; background:#101b2b; border:1px solid #324054; border-radius:6px; padding:10px; max-width:100%; }
+.history-scroll { overflow-x:auto; }
+.history-table { width:100%; border-collapse:collapse; font-size:12px; text-align:left; }
+.history-table td, .history-table th { padding:14px 20px; border-bottom:1px solid #273548; vertical-align:top; }
+.history-table td { overflow-wrap:anywhere; }
+.history-table small { display:block; margin-top:5px; color:#aab9ca; }
+#history-more { margin:12px 24px; }
+@media(max-width:650px) { .history-filters { padding:16px; } .history-filters label { width:100%; } }

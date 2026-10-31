@@ -17,6 +17,7 @@ import stat
 import sys
 import threading
 import time
+from urllib.parse import parse_qs
 
 CODE = Path('/opt/vpn-lab-admin')
 CONFIG = Path('/etc/vpn-lab-admin/config.json')
@@ -92,7 +93,9 @@ def read_request(channel):
         method, target, version = lines[0].split(' ')
     except (ValueError, UnicodeError):
         raise HTTPError(400) from None
-    if version != 'HTTP/1.1' or not re.fullmatch(r'/[A-Za-z0-9/._-]*', target):
+    target_ok = (re.fullmatch(r'/[A-Za-z0-9/._-]*', target)
+                 or re.fullmatch(r'/api/history\?[A-Za-z0-9%&=._~:+-]{0,1024}', target))
+    if version != 'HTTP/1.1' or not target_ok:
         raise HTTPError(400)
     if method not in ('GET', 'POST'):
         raise HTTPError(405)
@@ -197,11 +200,12 @@ class Authentication:
 
 
 class Application:
-    def __init__(self, config, authentication, validator, *, reader=read_protected, clock=time.monotonic):
+    def __init__(self, config, authentication, validator, *, reader=read_protected, clock=time.monotonic, history_reader=None):
         if config != EXPECTED_CONFIG:
             raise Refused('Unexpected panel configuration.')
         self.config, self.auth, self.validate = config, authentication, validator
         self.reader, self.clock = reader, clock
+        self.history_reader = history_reader
         self.assets = {}
         for route, name, mime in (('/', 'index.html', 'text/html; charset=utf-8'),
                                   ('/static/app.js', 'app.js', 'application/javascript; charset=utf-8'),
@@ -251,6 +255,21 @@ class Application:
                                            'snapshot': None, 'age_ms': None, 'csrf_token': csrf})
             return self.json_response({'version': 1, 'available': True, 'stale': False,
                                        'snapshot': value, 'age_ms': int(age*1000), 'csrf_token': csrf})
+        if method == 'GET' and (target == '/api/history' or target.startswith('/api/history?')):
+            self.auth.session(headers.get('cookie', ''), peer)
+            try:
+                values = parse_qs(target.partition('?')[2], keep_blank_values=True,
+                                  strict_parsing=True, max_num_fields=7, errors='strict')
+                if any(len(items) != 1 for items in values.values()):
+                    raise ValueError()
+                parameters = {key: items[0] for key, items in values.items()}
+                if self.history_reader is None:
+                    return self.json_response({'version': 1, 'available': False})
+                return self.json_response(self.history_reader(parameters))
+            except ValueError:
+                raise HTTPError(400) from None
+            except (OSError, RuntimeError):
+                return self.json_response({'version': 1, 'available': False})
         if method == 'POST' and target == '/api/logout':
             token, csrf = self.auth.session(headers.get('cookie', ''), peer)
             supplied = headers.get('x-csrf-token', '')
@@ -355,10 +374,11 @@ def main():
     os.umask(0o077)
     if os.geteuid() == 0 or not sys.flags.isolated or Path(__file__) != CODE/'server.py':
         raise Refused('Start the installed unprivileged panel service.')
-    for name in ('server.py', 'schema.py'):
+    for name in ('server.py', 'schema.py', 'history.py'):
         read_protected(CODE/name)
     sys.path.insert(0, str(CODE))
     import schema
+    import history
     config = strict_json(read_protected(CONFIG, limit=16384))
     if config != EXPECTED_CONFIG:
         raise Refused('Unexpected panel configuration.')
@@ -369,7 +389,7 @@ def main():
     read_protected(Path(config['certificate']), limit=65536)
     read_protected(Path(config['private_key']), limit=65536, secret=True)
     context.load_cert_chain(config['certificate'], config['private_key'])
-    application = Application(config, auth, schema.validate_snapshot)
+    application = Application(config, auth, schema.validate_snapshot, history_reader=history.query)
     with Server((config['bind'], config['port']), context, application) as server:
         server.serve_forever(poll_interval=.5)
 
