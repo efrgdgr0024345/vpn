@@ -36,7 +36,7 @@ docker exec "$peer" python3 -I -B /peer_fixture.py prepare
 docker exec -d "$peer" python3 /dns_fixture.py
 docker exec -d "$peer" python3 -I -B /peer_fixture.py https
 peer_ip=$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$peer")
-docker exec "$server" sh -c 'apt-get update -qq >/tmp/packages.log 2>&1 && apt-get install -y -qq --no-install-recommends python3 openssh-client curl ca-certificates >>/tmp/packages.log 2>&1 || { tail -30 /tmp/packages.log; exit 1; }'
+docker exec "$server" sh -c 'apt-get update -qq >/tmp/packages.log 2>&1 && apt-get install -y -qq --no-install-recommends python3 openssh-client curl ca-certificates nftables iproute2 dnsmasq-base >>/tmp/packages.log 2>&1 || { tail -30 /tmp/packages.log; exit 1; }'
 # Public synthetic trust anchor only; no peer TLS private key is copied.
 docker exec "$peer" cat /usr/local/share/ca-certificates/vpn-peer-fixture.crt | \
   docker exec -i "$server" sh -c 'cat > /usr/local/share/ca-certificates/vpn-peer-fixture.crt && chmod 644 /usr/local/share/ca-certificates/vpn-peer-fixture.crt && update-ca-certificates >/dev/null 2>&1'
@@ -54,6 +54,8 @@ docker cp ops/session_broker.py "$server:/test/ops/session_broker.py"
 docker cp ops/device_admin.py "$server:/test/ops/device_admin.py"
 docker cp ops/client_diagnostics.py "$server:/test/ops/client_diagnostics.py"
 docker cp ci/server_container_smoke.py "$server:/test/ci/server_container_smoke.py"
+docker cp ci/hotspot_smoke.py "$server:/test/ci/hotspot_smoke.py"
+docker cp ops/vpn_hotspot.py "$server:/test/ops/vpn_hotspot.py"
 docker cp ci/admin_panel_smoke.py "$server:/test/ci/admin_panel_smoke.py"
 docker cp vpn-admin/. "$server:/test/vpn-admin/"
 docker cp ci/ipv4_migration_smoke.py "$server:/test/ci/ipv4_migration_smoke.py"
@@ -64,6 +66,8 @@ docker exec "$server" chown -R 0:0 /test
 docker exec "$server" chmod -R go+rX /test/vpn-dashboard
 test_identity=$(docker exec "$server" /usr/bin/python3 -I -B /test/ops/prepare_test_access.py)
 peer_pin=$(printf '%s' "$test_identity" | docker exec -i "$peer" python3 -I -B /peer_fixture.py authorize)
+docker exec -e VPN_LAB_DISPOSABLE_SERVER_TEST=1 "$server" \
+  /usr/bin/python3 -I -B /test/ci/hotspot_smoke.py
 docker exec -e VPN_LAB_DISPOSABLE_SERVER_TEST=1 "$server" \
   /usr/bin/python3 -I -B /test/ci/client_control_smoke.py
 docker exec -e VPN_LAB_DISPOSABLE_SERVER_TEST=1 -e VPN_TEST_PEER_HOST="$peer_ip" \

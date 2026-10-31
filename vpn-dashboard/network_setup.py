@@ -106,6 +106,8 @@ def verify_during_session():
 
 
 def restore():
+    if portal_helper.hotspot_present():
+        raise Refused('Stop the VPN hotspot before restoring normal networking.')
     if portal_helper.active_openvpn():
         raise Refused('Stop the VPN before restoring normal networking.')
     state=state_read()

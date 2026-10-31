@@ -1,5 +1,16 @@
 # Project history and current status
 
+## Controlled Kali hotspot implementation — 31 October 2026
+
+The owner supplied radio capabilities showing concurrent managed/AP interfaces on
+one channel and requested an iPhone hotspot. The implementation adds a scoped,
+source-pinned local runner and an exact optional gateway policy inside the owned
+kill switch. The private server is unchanged and still enforces one session.
+Actual disposable DHCP/DNS/NAT and no-physical-fallback tests pass. Radio/channel
+preflight and failure-cleanup regressions pass; physical association and iPhone
+acceptance remain untested. HOTSPOT.md describes persistent helper/account changes,
+temporary network state, dependency licensing and cellular-fallback limits.
+
 ## HTTP panel migration deployed — 31 October 2026
 
 Release `8949ffb5ccf34d2465b1ae172c277d6d63f99219` passed functional checks

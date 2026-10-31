@@ -58,6 +58,21 @@ class UpgradeTests(unittest.TestCase):
             yield base, private
             self.assertEqual(private.read_bytes(), b'private fixture must remain unchanged')
 
+    def test_hotspot_upgrade_is_scoped_and_preserves_private_configuration(self):
+        with self.fixture() as (base,private):
+            files=json.loads(upgrade.MANIFEST.read_text())
+            names=('portal_helper.py','firewall_policy.py','network_setup.py')
+            for name in names:
+                path=upgrade.HELPER.parent/name
+                path.write_bytes(OLD);files['files'][str(path)]=upgrade.digest(OLD)
+            upgrade.MANIFEST.write_text(json.dumps(files))
+            bundle={name:(NEW,upgrade.digest(NEW)) for name in names}
+            with patch.object(upgrade,'HOTSPOT_LEGACY',{name:{upgrade.digest(OLD)} for name in names}):
+                upgrade.upgrade(NEW,upgrade.digest(NEW),hotspot_bundle=bundle)
+                upgrade.upgrade(NEW,upgrade.digest(NEW),hotspot_bundle=bundle)
+            self.assertTrue(all((upgrade.HELPER.parent/name).read_bytes()==NEW for name in names))
+            self.assertEqual(private.read_bytes(),b'private fixture must remain unchanged')
+
     def test_checked_update_and_same_version_rerun_preserve_private_settings(self):
         with self.fixture():
             for _ in range(2):

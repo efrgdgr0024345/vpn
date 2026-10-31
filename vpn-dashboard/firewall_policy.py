@@ -3,14 +3,16 @@ import argparse
 import json
 from pathlib import Path
 
-from portal_helper import allowed_input_rules, allowed_rules
+from portal_helper import allowed_input_rules, allowed_rules, hotspot_rules
 from security import validate_policy
 
 
-def render_batch(policy, vpn_uid):
+def render_batch(policy, vpn_uid, *, hotspot=False):
     policy = validate_policy(policy)
     if type(vpn_uid) is not int or vpn_uid <= 0:
         raise ValueError('A non-root dedicated VPN UID is required.')
+    if type(hotspot) is not bool:
+        raise ValueError('Expected explicit hotspot mode.')
     objects = [{'add': {'table': {'family': 'inet', 'name': 'vpn_guard'}}}]
     for name in ('input', 'output', 'forward'):
         objects.append({'add': {'chain': {
@@ -20,6 +22,13 @@ def render_batch(policy, vpn_uid):
         for expression in rules:
             objects.append({'add': {'rule': {'family': 'inet', 'table': 'vpn_guard',
                                            'chain': chain, 'expr': expression}}})
+    if hotspot:
+        for name, priority in (('prerouting',-100),('postrouting',100)):
+            objects.append({'add':{'chain':{'family':'inet','table':'vpn_guard','name':name,
+                'type':'nat','hook':name,'prio':priority,'policy':'accept'}}})
+        for chain,rules in hotspot_rules().items():
+            for expression in rules:
+                objects.append({'add':{'rule':{'family':'inet','table':'vpn_guard','chain':chain,'expr':expression}}})
     return {'nftables': objects}
 
 

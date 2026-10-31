@@ -84,3 +84,5 @@ requires Python 3, Tkinter and a graphical Linux desktop. Helper installation,
 profile provisioning and firewall migration must be done on the target host.
 
 The VPN-only read-only administration panel is documented in [VPN_ADMIN.md](VPN_ADMIN.md). Source and test results are distinct from live deployment.
+
+Temporary laptop-to-iPhone VPN sharing is described in [HOTSPOT.md](HOTSPOT.md), including its private-DNS and fail-closed forwarding tests.

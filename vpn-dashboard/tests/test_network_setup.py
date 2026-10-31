@@ -9,6 +9,16 @@ POLICY={'server_name':'VPNLabServer'}
 
 
 class NetworkSetupTests(unittest.TestCase):
+    def setUp(self):
+        self.hotspot=patch.object(network.portal_helper,'hotspot_present',return_value=False)
+        self.hotspot.start();self.addCleanup(self.hotspot.stop)
+
+    def test_restore_refuses_an_active_hotspot_before_releasing_the_guard(self):
+        network.portal_helper.hotspot_present.return_value=True
+        with patch.object(network.portal_helper,'mutate') as mutate,self.assertRaisesRegex(Refused,'Stop the VPN hotspot'):
+            network.restore()
+        mutate.assert_not_called()
+
     def test_unrelated_firewall_is_preserved_before_dns_or_state_changes(self):
         with patch.object(network,'load_policy',return_value=POLICY), \
                 patch.object(network,'service_account',return_value=SimpleNamespace(pw_uid=995)), \

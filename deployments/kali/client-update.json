@@ -1,7 +1,7 @@
 {
   "files": {
     "app.py": "b7059093b2d6c9804202b991323cf574cfeb7963dee425aa4b4a40ce993dcaf6",
-    "portal_helper.py": "96da266dc8f906aad8d5a3bfe2302156c5e855067f61917d4845b7209c9095be",
+    "portal_helper.py": "cb683c45da35c797905415c6db36eb02e48ac8c0bdf7f23fe177ad8eef06cf9f",
     "session_channel.py": "d4a386d14ec26728c618b8da8c0f8302a2783e7e32ba95a09e1252fc13aad7fe",
     "session_ui.py": "e812ee4fdee34c182026ec5959c293b3715e68a204f640adb40d7445238eabcf",
     "vpn_session_helper.py": "8a168e37acd56d7ca4cfd51a553cab8bda4d5152707a250ffd180f5b24362052"

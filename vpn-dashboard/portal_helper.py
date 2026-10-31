@@ -93,6 +93,36 @@ def allowed_input_rules(policy):
     ]
 
 
+HOTSPOT_IF = 'vpn-ap0'
+HOTSPOT_NETWORK = {'prefix': {'addr': '10.77.0.0', 'len': 24}}
+
+
+def hotspot_rules():
+    """Only AP DHCP and IPv4 forwarding through tun0; no physical fallback."""
+    ap_in = match(meta('iifname'), HOTSPOT_IF)
+    ap_out = match(meta('oifname'), HOTSPOT_IF)
+    source = match(payload('ip', 'saddr'), HOTSPOT_NETWORK)
+    ipv4 = match(meta('nfproto'), 'ipv4')
+    accept = {'accept': None}
+    state = {'match': {'op': 'in', 'left': {'ct': {'key': 'state'}}, 'right': {'set': ['established','related']}}}
+    return {
+        'input': [[ap_in, ipv4, match(payload('udp','sport'),68), match(payload('udp','dport'),67), accept]],
+        'output': [[ap_out, ipv4, match(payload('udp','sport'),67), match(payload('udp','dport'),68), accept]],
+        'forward': [[ap_in, source, match(meta('oifname'),'tun0'), accept],
+                    [match(meta('iifname'),'tun0'), ap_out, match(payload('ip','daddr'),HOTSPOT_NETWORK), state, accept]],
+        'prerouting': [[ap_in, source, match(payload(proto,'dport'),53), {'dnat': {'addr':'172.27.240.1','family':'ip'}}]
+                       for proto in ('udp','tcp')],
+        'postrouting': [[source, match(meta('oifname'),'tun0'), {'masquerade':None}]],
+    }
+
+
+def hotspot_present():
+    links = js([IP, '-j', 'link', 'show'])
+    if not isinstance(links,list):
+        raise Refused('Cannot verify hotspot state.')
+    return any(row.get('ifname')==HOTSPOT_IF for row in links)
+
+
 def portal_expr():
     # Recognize an old owned window only so it can be cleared, never reopened.
     return [match(meta('nfproto'), 'ipv4'), match(meta('oifname'), '@' + SET), {'accept': None}]
@@ -132,6 +162,14 @@ def canonical_rule(expression):
         if value['op'] != '==' or value['left'] not in (payload('ip', 'saddr'), payload('ip', 'daddr')):
             continue
         right = value['right']
+        if isinstance(right,dict) and set(right)=={'prefix'}:
+            prefix=right['prefix']
+            if isinstance(prefix,dict) and set(prefix)=={'addr','len'} and type(prefix['len']) is int and 0<=prefix['len']<=32:
+                try:
+                    ipaddress.IPv4Network(str(prefix['addr'])+'/'+str(prefix['len']),strict=True)
+                    ipv4_address_match=True
+                except ValueError: pass
+            continue
         values = right['set'] if isinstance(right, dict) and set(right) == {'set'} else [right]
         if not isinstance(values, list) or not values or not all(isinstance(item, str) for item in values):
             continue
@@ -151,6 +189,8 @@ def inspect_guard(document):
     if not isinstance(document, dict) or not isinstance(document.get('nftables'), list):
         raise Refused('Missing nftables ruleset.')
     chains, rules, sets, tables = {}, [], [], []
+    gateway = any(item.get('chain',{}).get('name')=='postrouting' for item in document['nftables'] if isinstance(item,dict))
+    chain_names = {'input','output','forward'} | ({'prerouting','postrouting'} if gateway else set())
     for item in document['nftables']:
         if not isinstance(item, dict) or len(item) != 1:
             raise Refused('Unknown ruleset object.')
@@ -167,24 +207,31 @@ def inspect_guard(document):
             tables.append(obj)
         elif kind == 'chain':
             name = obj.get('name')
-            if name not in ('input', 'output', 'forward') or name in chains:
+            if name not in chain_names or name in chains:
                 raise Refused('Unexpected firewall chain.')
             expected = {'family': 'inet', 'table': 'vpn_guard', 'name': name,
                         'type': 'filter', 'hook': name, 'prio': 0, 'policy': 'drop'}
+            if name in ('prerouting','postrouting'):
+                expected.update(type='nat',prio=-100 if name=='prerouting' else 100,policy='accept')
             if {k: v for k, v in obj.items() if k != 'handle'} != expected:
                 raise Refused('Guard chain is not the required drop policy.')
             chains[name] = obj
         elif kind == 'rule':
-            if set(obj) - {'family', 'table', 'chain', 'handle', 'expr', 'comment'} or obj.get('chain') not in ('input', 'output'):
+            if set(obj) - {'family', 'table', 'chain', 'handle', 'expr', 'comment'} or obj.get('chain') not in chain_names:
                 raise Refused('Unexpected firewall rule.')
             rules.append(obj)
         else:
             sets.append(obj)
-    if len(tables) != 1 or set(chains) != {'input', 'output', 'forward'}:
+    if len(tables) != 1 or set(chains) != chain_names:
         raise Refused('Required input/output/forward drop chains missing.')
     remaining = {chain: [canonical_rule(rule) for rule in expressions]
                  for chain, expressions in (('output', allowed_rules(policy)),
                                             ('input', allowed_input_rules(policy)))}
+    if gateway:
+        for chain,extra in hotspot_rules().items():
+            remaining.setdefault(chain,[]).extend(canonical_rule(rule) for rule in extra)
+    else:
+        remaining['forward']=[]
     own_rules = 0
     for rule in rules:
         expr = rule.get('expr')

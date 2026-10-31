@@ -38,9 +38,14 @@ LEGACY = {
     'session_channel.py': {'0f32f5050602f5a79a9f77a6837fc8f4bb9a9b8b7951b67b76bd9ceb4dd567b6',
                            'd3981174df69eb01f1bc96606aa8eac0faa3a014340fc1c8123f0df58f3f8cb6'},
     'session_ui.py': {'7fa19a51db92c708a1c321370bbfc6efa0cc94615a3a87d6b07be47148a2918a'},
-    'portal_helper.py': {'e401522faad3638eff1f9d6d2874e26a7c749713e34a2fb0fe3b0c78429e17ef'},
+    'portal_helper.py': {'e401522faad3638eff1f9d6d2874e26a7c749713e34a2fb0fe3b0c78429e17ef', '96da266dc8f906aad8d5a3bfe2302156c5e855067f61917d4845b7209c9095be'},
     'app.py': {'d0433e0f3f06edefb84e334183af599df79c13c17e6ab08ab025518397436b84'},
 }
+
+
+HOTSPOT_LEGACY = {'portal_helper.py':{'96da266dc8f906aad8d5a3bfe2302156c5e855067f61917d4845b7209c9095be'},
+                  'firewall_policy.py':{'d24662b4c8f241f5597efcfeb48e1025ef0984b9f6fa3ddd62defee62607629b'},
+                  'network_setup.py':{'a626cd149eaa70d45e8f255a6e9273c0d40222f7a1f77f8244e821ca52e3427d'}}
 
 
 def targets():
@@ -260,7 +265,7 @@ def load_bundle(source, expected):
     return {name: (read_file(source/name, source=True), value) for name, value in document['files'].items()}
 
 
-def upgrade(candidate, expected, *, bundle=None, dhcp_server=None):
+def upgrade(candidate, expected, *, bundle=None, dhcp_server=None, hotspot_bundle=None):
     if dhcp_server is not None:
         dhcp_server=dhcp_address(dhcp_server)
     updates = {HELPER: (candidate, expected, {OLD_SHA256})}
@@ -269,6 +274,11 @@ def upgrade(candidate, expected, *, bundle=None, dhcp_server=None):
             raise UpgradeError('The complete reviewed transport/log bundle is required.')
         updates = {path: (value, checksum, LEGACY[name])
                    for name, (value, checksum) in bundle.items() for path in targets()[name]}
+    if hotspot_bundle is not None:
+        legacy = HOTSPOT_LEGACY
+        if bundle is not None or dhcp_server is not None or set(hotspot_bundle)!=set(legacy):
+            raise UpgradeError('Use only the complete fixed hotspot guard bundle.')
+        updates.update({HELPER.parent/name:(value,checksum,legacy[name]) for name,(value,checksum) in hotspot_bundle.items()})
     for path, (value, checksum, _) in updates.items():
         if not isinstance(checksum, str) or not re.fullmatch(r'[0-9a-f]{64}', checksum) or digest(value) != checksum:
             raise UpgradeError('Candidate hash mismatch; nothing installed.')
