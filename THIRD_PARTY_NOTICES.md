@@ -32,3 +32,15 @@ supplied files. Existing notices are preserved; no third-party authorship or
 blanket relicensing is claimed here. A repository-wide license for the original
 project has not been selected. These acknowledgements do not replace the
 upstream license terms or the installed distribution notices.
+
+## Private administration browser tools
+
+The optional isolated browser launcher uses the installed Mozilla Firefox/Firefox
+ESR browser and Mozilla NSS `certutil` (provided by the distribution's
+`libnss3-tools` package). These tools are not vendored in this repository. Mozilla
+provides their upstream code and license notices:
+[Firefox](https://www.mozilla.org/firefox/),
+[NSS](https://firefox-source-docs.mozilla.org/security/nss/), and the
+[Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/).
+The panel's Python, HTML, JavaScript and CSS implementation is project source;
+it includes no external analytics or CDN assets.

@@ -506,6 +506,51 @@ class ConnectionTests(unittest.TestCase):
         self.assertIn("inputs.operation == 'enable-ipv4-only'", gate)
         self.assertNotIn('ipv4-only-status', gate)
 
+    def test_private_panel_installation_embeds_only_fixed_public_sources(self):
+        revision = 'a'*40
+        public_der = b'panel public CA fixture'
+        public_pem = '-----BEGIN CERTIFICATE-----\n'+base64.b64encode(public_der).decode()+'\n-----END CERTIFICATE-----\n'
+        report = {'version': 1, 'source_commit': revision, 'panel_url': 'https://172.27.240.1:8443',
+            'web_service_active': True, 'collector_service_active': True,
+            'vpn_runtime_preserved': True, 'firewall_rule_verified': True,
+            'vpn_only_listener': True, 'credential_contents_returned': False,
+            'ca_certificate_sha256': hashlib.sha256(public_der).hexdigest(),
+            'ca_certificate_pem': public_pem, 'leaf_spki_pin': 'sha256//'+'A'*43+'='}
+        calls = []
+        def run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            return self.result() if argv[0].endswith('ssh-keyscan') else self.result(json.dumps(report))
+        with patch('sys.stdout', io.StringIO()):
+            lab.execute('install-admin-panel', {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY,
+                                               'GITHUB_SHA': revision}, run)
+        self.assertEqual(calls[-1][1]['timeout'], 360)
+        self.assertTrue(calls[-1][1]['input'].startswith('ADMIN_SOURCES = '))
+        self.assertIn('SOURCE_REVISION = '+repr(revision), calls[-1][1]['input'])
+        self.assertTrue(calls[-1][1]['input'].endswith((ROOT/'ops/install_admin_panel.py').read_text()))
+        self.assertNotIn(KEY, calls[-1][1]['input'])
+        workflow = (ROOT/'.github/workflows/lab-admin.yml').read_text()
+        gate = next(line for line in workflow.splitlines()
+                    if "if: inputs.operation == 'install-foundation'" in line)
+        self.assertIn("inputs.operation == 'install-admin-panel'", gate)
+
+    def test_panel_report_rejects_secrets_and_wrong_revision_before_printing(self):
+        public_der = b'panel public CA fixture'
+        public_pem = '-----BEGIN CERTIFICATE-----\n'+base64.b64encode(public_der).decode()+'\n-----END CERTIFICATE-----\n'
+        report = {'version': 1, 'source_commit': 'b'*40, 'panel_url': 'https://172.27.240.1:8443',
+            'web_service_active': True, 'collector_service_active': True,
+            'vpn_runtime_preserved': True, 'firewall_rule_verified': True,
+            'vpn_only_listener': True, 'credential_contents_returned': False,
+            'ca_certificate_sha256': hashlib.sha256(public_der).hexdigest(),
+            'ca_certificate_pem': public_pem, 'leaf_spki_pin': 'sha256//'+'A'*43+'='}
+        for changes in ({}, {'admin_password': 'PRIVATE DATA'}, {'credential_contents_returned': True}):
+            def run(argv, **kwargs):
+                return self.result() if argv[0].endswith('ssh-keyscan') else self.result(json.dumps({**report, **changes}))
+            output = io.StringIO()
+            with patch('sys.stdout', output), self.assertRaises(lab.LabError):
+                lab.execute('install-admin-panel', {**SETTINGS, 'VPN_LAB_SSH_PRIVATE_KEY': KEY,
+                                                   'GITHUB_SHA': 'a'*40}, run)
+            self.assertNotIn('PRIVATE DATA', output.getvalue())
+
     def test_check_report_preserves_literal_percent_sequences_without_publishing_key(self):
         report = {**REPORT, 'running_service_units': ['example%0Aservice.service']}
         def run(argv, **kwargs):

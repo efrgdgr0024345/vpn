@@ -23,6 +23,7 @@ sys.path.insert(0,str(ROOT/'ci'))
 import client_control_smoke
 import diagnostics_client_smoke
 import ipv4_migration_smoke
+import admin_panel_smoke
 PHASE='preflight'
 
 
@@ -149,6 +150,10 @@ def main():
                     or any(value is None for value in diagnosis['input_counters'].values())):
                 raise RuntimeError('Read-only diagnostics did not match the real VPN and firewall baseline.')
             print('PASS: read-only server diagnostics observe actual private DNS, tunnel, listeners and empty forwarding lease.',flush=True)
+            PHASE='private VPN administration panel'
+            admin_panel_smoke.run({'openvpn-server@vpn-lab.service':server,
+                'vpn-lab-broker.service':broker,'unbound.service':resolver})
+            time.sleep(3)
             PHASE='external peer VPN client'
             external_vpn_test.PEER_LIBRARY_SOURCE=(ROOT/'ops/inspect_test_peer.py').read_text()
             external_vpn_test.PEER_CLIENT_SOURCE=(ROOT/'ops/peer_vpn_client.py').read_text()

@@ -23,6 +23,7 @@ from prepare_test_access import validate_report as validate_test_access_report
 from inspect_test_peer import validate_report as validate_test_peer_report
 from external_vpn_test import validate_report as validate_external_test_report
 from enable_ipv4_only import validate_report as validate_ipv4_only_report, REPORT_FIELDS as IPV4_REPORT_FIELDS
+from install_admin_panel import validate_report as validate_admin_panel_report, REPORT_FIELDS as ADMIN_REPORT_FIELDS
 
 ENVIRONMENT = {'PATH': '/usr/bin:/bin:/usr/sbin', 'LC_ALL': 'C'}
 
@@ -178,7 +179,7 @@ def execute(operation, environment, run=bounded_run):
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     if operation not in ('connectivity', 'inventory', 'diagnose-connection', 'prepare-test-access', 'inspect-test-peer', 'test-from-peer', 'install-foundation', 'test-foundation','probe-udp','prepare-download','close-download',
                          'device-status','revoke-device','enable-device','reset-sessions','reboot-lab','rotate-password',
-                         'enable-ipv4-only','ipv4-only-status'):
+                         'enable-ipv4-only','ipv4-only-status','install-admin-panel'):
         raise LabError('Unsupported lab operation.')
     host, port, fingerprint = settings(environment)
     peer = None
@@ -199,6 +200,16 @@ def execute(operation, environment, run=bounded_run):
         raise LabError('Select a fixed registered device name.')
     if operation == 'diagnose-connection':
         program = (ROOT/'ops/server_diagnostics.py').read_text()
+    if operation == 'install-admin-panel':
+        revision = environment.get('GITHUB_SHA', '')
+        if not re.fullmatch(r'[0-9a-f]{40}', revision):
+            raise LabError('Panel installation requires an exact source revision.')
+        sources = {name: (ROOT/'vpn-admin'/name).read_text() for name in (
+            'server.py', 'schema.py', 'collector.py', 'static/index.html', 'static/app.js', 'static/style.css')}
+        sources['server_diagnostics.py'] = (ROOT/'ops/server_diagnostics.py').read_text()
+        program = ('ADMIN_SOURCES = '+repr(sources)+'\nSOURCE_REVISION = '+repr(revision)+'\n'
+                   +(ROOT/'ops/install_admin_panel.py').read_text())
+        timeout = 360
     if operation in ('enable-ipv4-only', 'ipv4-only-status'):
         program = 'IPV4_ONLY_OPERATION = ' + repr(operation) + '\n'
         if operation == 'enable-ipv4-only':
@@ -365,6 +376,8 @@ def execute(operation, environment, run=bounded_run):
             expected={'password_rotated','sessions_invalidated','old_download_closed','credential_contents_returned'}
         elif operation in ('enable-ipv4-only', 'ipv4-only-status'):
             expected = IPV4_REPORT_FIELDS
+        elif operation == 'install-admin-panel':
+            expected = ADMIN_REPORT_FIELDS
         if not isinstance(report, dict) or set(report) != expected:
             raise LabError('Inventory returned unexpected fields; raw output withheld.')
         if operation == 'diagnose-connection':
@@ -394,6 +407,13 @@ def execute(operation, environment, run=bounded_run):
                     raise ValueError('Operation mismatch.')
             except ValueError:
                 raise LabError('IPv4-only operation returned unsupported data; raw output withheld.') from None
+        if operation == 'install-admin-panel':
+            try:
+                validate_admin_panel_report(report)
+                if report['source_commit'] != environment.get('GITHUB_SHA'):
+                    raise ValueError('Source revision mismatch.')
+            except ValueError:
+                raise LabError('Panel installation returned unsupported data; raw output withheld.') from None
         if environment.get('GITHUB_ACTIONS') == 'true':
             # Checks annotations are available through api.github.com even when
             # signed log-download hosts cannot be reached by the controller.
@@ -411,6 +431,10 @@ def execute(operation, environment, run=bounded_run):
             # Stage is a fixed enum verified above. Keep the approved report
             # visible while ensuring failed packet tests/cleanup fail the job.
             raise LabError('External VPN test failed at '+report['stage']+'; see the validated report.')
+        if operation == 'install-admin-panel' and not all(report[key] for key in (
+                'web_service_active', 'collector_service_active', 'vpn_runtime_preserved',
+                'firewall_rule_verified', 'vpn_only_listener')):
+            raise LabError('Panel installation did not pass every live verification; see the validated report.')
     print('Lab '+operation+' completed; runner key file removed.')
 
 

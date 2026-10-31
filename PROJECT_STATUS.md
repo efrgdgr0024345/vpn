@@ -1,5 +1,41 @@
 # Project history and current status
 
+## VPN-only read-only admin panel implementation — 31 October 2026
+
+The first panel implementation provides service/private-DNS health, device policy,
+IPv6 observations and bounded activity over a separate authenticated HTTPS view.
+It binds only to the private VPN address, runs the web process without root or
+capabilities, and uses a separate root read-only snapshot collector. Its narrow
+input exception requires the existing single-address authorization grant on every
+packet. No additional VPN slot or HTTP mutation/root-command API is introduced.
+
+Local validation includes actual TLS/CSRF/session/HTTP parser tests, slow-request
+and concurrency limits, atomic collector snapshots, real CA/leaf issuance and NSS
+trust import/repair, plus desktop/mobile Chromium checks with explicitly synthetic
+data. The disposable integration passed actual HTTPS access through OpenVPN/PAM
+with an unprivileged web UID, a preserved VPN process/credential baseline, and the
+existing VPN/token/revocation/restore regressions. Systemd lifecycle is emulated
+in those containers; real service sandbox/startup validation still needs deployment.
+
+The installer refuses unknown port listeners and protected-file modifications,
+verifies the live TLS leaf before adding access, and validates public certificate
+contents before publishing them. Public CA data is returned through the validated
+GitHub report; admin passwords and all private keys stay on the VPS. A dedicated
+Firefox profile avoids altering global browser/OS trust. VPN_ADMIN.md describes
+trust setup, observations and limits.
+
+No production panel is installed yet. The existing GitHub SSH attempt
+41171990373 was rejected; the owner was asked to renew the existing temporary
+server grant. Repository source/tests and previews are separate from deployment.
+The owner has not selected additional management controls; this first view is
+read-only. The configured one-VPN-session limit remains unchanged.
+
+The existing diagnostic integration now requires an idle forwarding lease before
+capturing its baseline and reports resolver/routes/firewall comparison booleans
+separately on failure. Full comparison assertions remain intact. A subsequent
+local full run passed; the exact component behind the earlier intermittent
+composite failure remains unconfirmed.
+
 ## Kali kernel IPv6 disablement confirmed; browsing reported working — 31 October 2026
 
 The owner supplied successful permanent-setup output, then after reboot supplied

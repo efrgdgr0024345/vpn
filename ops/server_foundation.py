@@ -407,6 +407,8 @@ def install(endpoint, ssh_port, container_test=False):
     global STAGE
     if os.geteuid() != 0:
         raise SetupError('Installation requires root on the disposable lab server.')
+    if os.path.lexists('/etc/vpn-lab-admin/install-manifest.json'):
+        raise SetupError('The private panel is installed; review its firewall before replacing the foundation.')
     resource.setrlimit(resource.RLIMIT_CORE,(0,0))
     release = Path('/etc/os-release').read_text()
     if not re.search(r'^ID=debian$',release,re.M) or not re.search(r'^VERSION_ID="?13"?$',release,re.M):

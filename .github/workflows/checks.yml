@@ -29,7 +29,7 @@ jobs:
       - name: Install test dependencies on disposable runner
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends python3-tk xvfb xauth nftables iproute2
+          sudo apt-get install --yes --no-install-recommends python3-tk xvfb xauth nftables iproute2 libnss3-tools openssl
       - name: Check source syntax and example JSON
         working-directory: vpn-dashboard
         run: |
@@ -45,6 +45,8 @@ jobs:
           sh -n install.sh
       - name: Run unit and security regression tests
         run: python3 ci/run_units.py vpn-dashboard/tests
+      - name: Check private panel JavaScript syntax
+        run: node --check vpn-admin/static/app.js
       - name: Test lab SSH safeguards and key authorization
         run: python3 ci/run_units.py ci/tests
       - name: Open and close the real Tk dashboard on a virtual display

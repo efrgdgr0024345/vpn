@@ -64,10 +64,46 @@ def firewall_signature():
     return structural(document)
 
 
+def wait_for_idle_authorization():
+    deadline = time.monotonic()+10
+    while True:
+        document = json.loads(command(['/usr/sbin/nft', '-j', 'list', 'set', 'inet', 'vpn_lab', 'authorized']))
+        sets = [item['set'] for item in document['nftables']
+                if item.get('set', {}).get('name') == 'authorized']
+        if len(sets) != 1 or sets[0].get('type') != 'ipv4_addr':
+            raise RuntimeError('The diagnostics fixture authorization set did not verify.')
+        if not sets[0].get('elem'):
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError('The diagnostics fixture requires an idle forwarding lease.')
+        time.sleep(.2)
+
+
+def nft_difference_categories(before, after):
+    def groups(document):
+        result = {name: [] for name in ('metainfo', 'tables', 'chains', 'sets', 'set_elements', 'rules', 'other')}
+        for item in document.get('nftables', []):
+            if 'set' in item:
+                value = dict(item['set'])
+                elements = value.pop('elem', [])
+                result['sets'].append(value)
+                result['set_elements'].append(elements)
+            else:
+                kind = next(iter(item), '')
+                group = {'metainfo': 'metainfo', 'table': 'tables', 'chain': 'chains',
+                         'element': 'set_elements', 'rule': 'rules'}.get(kind, 'other')
+                result[group].append(item)
+        return result
+    left, right = groups(before), groups(after)
+    changed = sorted(name for name in left if left[name] != right[name])
+    return changed or (['object_order'] if before != after else [])
+
+
 def run(endpoint):
     """Run only while the disposable server and fake public peers are active."""
     global PHASE
     disposable()
+    wait_for_idle_authorization()
     before_resolver = Path('/etc/resolv.conf').read_bytes()
     before_routes = command(['/usr/sbin/ip', '-j', '-4', 'route', 'show', 'table', 'all'])
     before_firewall = firewall_signature()
@@ -146,9 +182,26 @@ def run(endpoint):
             if any(item.get('ifname') == PEER for item in links):
                 command(['/usr/sbin/ip', 'link', 'delete', PEER])
         environment.cleanup()
-    if (Path('/etc/resolv.conf').read_bytes() != before_resolver
-            or command(['/usr/sbin/ip', '-j', '-4', 'route', 'show', 'table', 'all']) != before_routes
-            or firewall_signature() != before_firewall):
+    after_resolver = Path('/etc/resolv.conf').read_bytes()
+    after_routes = command(['/usr/sbin/ip', '-j', '-4', 'route', 'show', 'table', 'all'])
+    after_firewall = firewall_signature()
+    comparison = {'resolver_unchanged': after_resolver == before_resolver,
+                  'routes_unchanged': after_routes == before_routes,
+                  'firewall_unchanged': after_firewall == before_firewall}
+    if not all(comparison.values()):
+        route_order_only = (before_routes != after_routes
+            and sorted(json.dumps(row, sort_keys=True) for row in json.loads(before_routes))
+                == sorted(json.dumps(row, sort_keys=True) for row in json.loads(after_routes)))
+        summary = {**comparison, 'route_order_only': route_order_only,
+                   'nft_difference_categories': nft_difference_categories(before_firewall, after_firewall)}
+        print('::notice title=VPN diagnostics baseline comparison::'+json.dumps(summary, sort_keys=True), flush=True)
+        # Synthetic container-only snapshots remain private and are never uploaded.
+        # They identify the actual component without dumping raw data to Actions.
+        debug = Path('/run/vpn-diagnostics-network-difference.json')
+        debug.write_text(json.dumps({'comparison': summary, 'routes_before': json.loads(before_routes),
+            'routes_after': json.loads(after_routes), 'firewall_before': before_firewall,
+            'firewall_after': after_firewall}, sort_keys=True))
+        debug.chmod(0o600)
         raise RuntimeError('The isolated diagnostics fixture changed server networking.')
     print('PASS: actual automated client TLS, private/system DNS, verified HTTPS, bad-password classification and explicit restoration; server networking preserved.', flush=True)
 

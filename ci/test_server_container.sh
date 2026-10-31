@@ -40,10 +40,11 @@ docker exec "$server" sh -c 'apt-get update -qq >/tmp/packages.log 2>&1 && apt-g
 # Public synthetic trust anchor only; no peer TLS private key is copied.
 docker exec "$peer" cat /usr/local/share/ca-certificates/vpn-peer-fixture.crt | \
   docker exec -i "$server" sh -c 'cat > /usr/local/share/ca-certificates/vpn-peer-fixture.crt && chmod 644 /usr/local/share/ca-certificates/vpn-peer-fixture.crt && update-ca-certificates >/dev/null 2>&1'
-docker exec "$server" mkdir -p /test/ops /test/ci /test/vpn-dashboard
+docker exec "$server" mkdir -p /test/ops /test/ci /test/vpn-dashboard /test/vpn-admin
 docker cp ops/server_foundation.py "$server:/test/ops/server_foundation.py"
 docker cp ops/server_selftest.py "$server:/test/ops/server_selftest.py"
 docker cp ops/enable_ipv4_only.py "$server:/test/ops/enable_ipv4_only.py"
+docker cp ops/install_admin_panel.py "$server:/test/ops/install_admin_panel.py"
 docker cp ops/server_diagnostics.py "$server:/test/ops/server_diagnostics.py"
 docker cp ops/prepare_test_access.py "$server:/test/ops/prepare_test_access.py"
 docker cp ops/inspect_test_peer.py "$server:/test/ops/inspect_test_peer.py"
@@ -53,6 +54,8 @@ docker cp ops/session_broker.py "$server:/test/ops/session_broker.py"
 docker cp ops/device_admin.py "$server:/test/ops/device_admin.py"
 docker cp ops/client_diagnostics.py "$server:/test/ops/client_diagnostics.py"
 docker cp ci/server_container_smoke.py "$server:/test/ci/server_container_smoke.py"
+docker cp ci/admin_panel_smoke.py "$server:/test/ci/admin_panel_smoke.py"
+docker cp vpn-admin/. "$server:/test/vpn-admin/"
 docker cp ci/ipv4_migration_smoke.py "$server:/test/ci/ipv4_migration_smoke.py"
 docker cp ci/client_control_smoke.py "$server:/test/ci/client_control_smoke.py"
 docker cp ci/diagnostics_client_smoke.py "$server:/test/ci/diagnostics_client_smoke.py"

@@ -24,6 +24,7 @@ docker cp ops/external_vpn_test.py "$container:/test/ops/external_vpn_test.py"
 docker cp ops/peer_vpn_client.py "$container:/test/ops/peer_vpn_client.py"
 docker cp ops/server_foundation.py "$container:/test/ops/server_foundation.py"
 docker cp ops/enable_ipv4_only.py "$container:/test/ops/enable_ipv4_only.py"
+docker cp ops/install_admin_panel.py "$container:/test/ops/install_admin_panel.py"
 docker cp ops/configure_download.py "$container:/test/ops/configure_download.py"
 docker cp vpn-dashboard/safe_io.py "$container:/test/vpn-dashboard/safe_io.py"
 docker exec "$container" chown -R 0:0 /test

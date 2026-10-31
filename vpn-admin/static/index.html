@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <title>VPN Desk · Private console</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <noscript><p class="noscript">Enable JavaScript to sign in and view live status.</p></noscript>
+  <main id="login-view" class="login-view">
+    <div class="login-brand"><span class="brand-mark" aria-hidden="true"><span></span></span><span>VPN Desk</span><span class="brand-label">PRIVATE CONSOLE</span></div>
+    <section class="login-card" aria-labelledby="login-title">
+      <div class="eyebrow"><span class="small-dot" aria-hidden="true"></span> YOUR VPN. YOUR CONTROL.</div>
+      <h1 id="login-title">A clearer view<br>of your connection.</h1>
+      <p class="login-intro">Sign in to see your server, device access and recent activity.</p>
+      <form id="login-form">
+        <label for="admin-password">Administrator password</label>
+        <input id="admin-password" name="password" type="password" autocomplete="current-password" required maxlength="256" aria-describedby="login-help login-error">
+        <p id="login-help" class="field-help">Use the administrator password for this console.</p>
+        <p id="login-error" class="form-error" role="alert" hidden></p>
+        <button id="login-button" class="button button-primary" type="submit"><span>Sign in</span><span aria-hidden="true">→</span></button>
+      </form>
+      <div class="login-footer"><span class="lock-symbol" aria-hidden="true"></span> Available through your private VPN</div>
+    </section>
+    <p class="login-note">A local view of your VPN. No analytics or external page assets.</p>
+  </main>
+
+  <div id="console-view" class="console-shell" hidden>
+    <aside class="sidebar" aria-label="Console navigation">
+      <a class="sidebar-brand" href="#overview" aria-label="VPN Desk overview"><span class="brand-mark" aria-hidden="true"><span></span></span><span>VPN Desk<small>PRIVATE CONSOLE</small></span></a>
+      <div class="sidebar-section">WORKSPACE</div>
+      <nav class="navigation">
+        <a class="nav-link active" href="#overview"><span class="nav-icon" aria-hidden="true">▦</span> Overview</a>
+        <a class="nav-link" href="#devices"><span class="nav-icon" aria-hidden="true">▯</span> Device access</a>
+        <a class="nav-link" href="#activity"><span class="nav-icon" aria-hidden="true">≋</span> Activity</a>
+      </nav>
+      <div class="sidebar-foot"><span class="small-dot muted-dot" aria-hidden="true"></span><div>Single-session VPN<small>One forwarding grant at a time</small></div></div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="breadcrumb">Workspace <span aria-hidden="true">/</span> <strong>Overview</strong></div>
+        <div class="topbar-actions"><span id="freshness-badge" class="badge badge-neutral"><span class="status-dot" aria-hidden="true"></span><span id="freshness-label">Checking status</span></span><button id="logout-button" class="button button-quiet" type="button">Sign out <span aria-hidden="true">→</span></button></div>
+      </header>
+
+      <main class="content" id="overview">
+        <div class="page-heading"><div><div class="eyebrow">VPN OVERVIEW</div><h1>Your private network.</h1><p>Service health, device access and a record of recent changes.</p></div><button id="refresh-button" class="button button-secondary" type="button"><span class="refresh-icon" aria-hidden="true">↻</span> Refresh</button></div>
+        <div id="status-banner" class="notice" role="status" aria-live="polite"><span class="notice-mark" aria-hidden="true">i</span><span id="status-message">Checking for a server update…</span></div>
+
+        <section class="metrics" aria-label="VPN summary">
+          <article class="metric"><div class="metric-label">VPN service <span class="metric-symbol" aria-hidden="true">⌁</span></div><div id="vpn-value" class="metric-value">Unknown</div><p id="vpn-detail">Waiting for a server update</p></article>
+          <article class="metric"><div class="metric-label">Authorized forwarding <span class="metric-symbol" aria-hidden="true">⇄</span></div><div class="metric-value"><span id="grant-value">—</span><span class="metric-denominator"> / 1</span></div><p id="grant-detail">No current observation</p></article>
+          <article class="metric"><div class="metric-label">Private DNS <span class="metric-symbol" aria-hidden="true">◎</span></div><div id="dns-value" class="metric-value">Unknown</div><p id="dns-detail">Waiting for a server update</p></article>
+          <article class="metric"><div class="metric-label">Kernel IPv6 <span class="metric-symbol" aria-hidden="true">#</span></div><div id="ipv6-value" class="metric-value">Unknown</div><p id="ipv6-detail">No current observation</p></article>
+        </section>
+
+        <div class="overview-grid">
+          <section class="panel" aria-labelledby="health-title">
+            <div class="panel-heading"><div><h2 id="health-title">Server health</h2><p>The services behind your connection.</p></div><span class="section-icon" aria-hidden="true">⌁</span></div>
+            <div id="service-list" class="service-list"><p class="empty-state">Waiting for service status.</p></div>
+            <div class="tunnel-summary"><span>Tunnel interface</span><div><span id="tunnel-badge" class="badge badge-neutral">Unknown</span><span id="tunnel-address" class="mono">—</span></div></div>
+          </section>
+
+          <section class="panel" id="devices" aria-labelledby="devices-title">
+            <div class="panel-heading"><div><h2 id="devices-title">Device access</h2><p>Registered identities and their current forwarding grant.</p></div><span id="device-count" class="count-label">—</span></div>
+            <div id="device-list" class="device-list"><p class="empty-state">Waiting for registered devices.</p></div>
+            <p class="panel-caption">A forwarding grant identifies an authorized VPN address. It does not attest the physical device.</p>
+          </section>
+        </div>
+
+        <section class="panel activity-panel" id="activity" aria-labelledby="activity-title">
+          <div class="panel-heading"><div><h2 id="activity-title">Recent activity</h2><p>Service and access changes observed by the server.</p></div><span class="section-icon" aria-hidden="true">≋</span></div>
+          <ol id="activity-list" class="activity-list"><li class="empty-state">No activity is available yet.</li></ol>
+          <p class="panel-caption">A filtered operational history. Passwords, keys, tokens and raw journals are excluded.</p>
+        </section>
+
+        <footer class="page-footer"><span>VPN Desk <span aria-hidden="true">·</span> Private console</span><span id="updated-at">No server observation available</span></footer>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

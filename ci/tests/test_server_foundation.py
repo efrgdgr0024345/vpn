@@ -13,6 +13,14 @@ import server_selftest as probe
 
 
 class FoundationTests(unittest.TestCase):
+    def test_installed_panel_prevents_foundation_replacement_before_mutation(self):
+        with patch.object(server.os, 'geteuid', return_value=0), \
+                patch.object(server.os.path, 'lexists', return_value=True), \
+                patch.object(server, 'run') as run:
+            with self.assertRaisesRegex(server.SetupError, 'private panel'):
+                server.install('192.0.2.10', 22)
+            run.assert_not_called()
+
     def test_private_resolver_has_no_public_forwarder_in_production(self):
         configuration=server.resolver_configuration(False)
         self.assertIn('interface: 172.27.240.1',configuration)
