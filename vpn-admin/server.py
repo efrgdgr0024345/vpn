@@ -1,4 +1,4 @@
-"""Private HTTPS status panel. No privileged commands or VPN control socket."""
+"""VPN-only HTTP status panel. No privileged commands or VPN control socket."""
 import base64
 from collections import deque
 import hashlib
@@ -12,7 +12,6 @@ import resource
 import secrets
 import socket
 import socketserver
-import ssl
 import stat
 import sys
 import threading
@@ -21,14 +20,12 @@ from urllib.parse import parse_qs
 
 CODE = Path('/opt/vpn-lab-admin')
 CONFIG = Path('/etc/vpn-lab-admin/config.json')
-PUBLIC_CA = Path('/etc/vpn-lab-admin/ca.crt')
-COOKIE = '__Host-vpn-admin'
+COOKIE = 'vpn-admin-http'
 MAX_HEADERS = 16384
 MAX_BODY = 1024
-EXPECTED_CONFIG = {'version': 1, 'bind': '172.27.240.1', 'port': 8443,
-    'origin': 'https://172.27.240.1:8443', 'snapshot': '/run/vpn-lab-admin/status.json',
-    'auth': '/etc/vpn-lab-admin/auth.json', 'certificate': '/etc/vpn-lab-admin/server.crt',
-    'private_key': '/etc/vpn-lab-admin/server.key', 'static': str(CODE/'static')}
+EXPECTED_CONFIG = {'version': 1, 'bind': '172.27.240.1', 'port': 8080,
+    'origin': 'http://172.27.240.1:8080', 'snapshot': '/run/vpn-lab-admin/status.json',
+    'auth': '/etc/vpn-lab-admin/auth.json', 'static': str(CODE/'static')}
 SECURITY_HEADERS = {'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
     'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"}
@@ -211,7 +208,6 @@ class Application:
                                   ('/static/app.js', 'app.js', 'application/javascript; charset=utf-8'),
                                   ('/static/style.css', 'style.css', 'text/css; charset=utf-8')):
             self.assets[route] = (self.reader(Path(config['static'])/name), mime)
-        self.ca = self.reader(PUBLIC_CA, limit=65536)
 
     def dispatch(self, request, peer):
         method, target, headers, body = request
@@ -221,7 +217,7 @@ class Application:
             raise HTTPError(403) from None
         if address not in ipaddress.IPv4Network('172.27.240.0/24') or int(address) & 255 in (0, 1, 255):
             raise HTTPError(403)
-        if headers.get('host') != '172.27.240.1:8443':
+        if headers.get('host') != '172.27.240.1:8080':
             raise HTTPError(403)
         if headers.get('sec-fetch-site') not in (None, 'same-origin', 'none'):
             raise HTTPError(403)
@@ -230,8 +226,6 @@ class Application:
         if method == 'GET' and target in self.assets:
             content, mime = self.assets[target]
             return 200, content, {'Content-Type': mime}
-        if method == 'GET' and target == '/ca.crt':
-            return 200, self.ca, {'Content-Type': 'application/x-pem-file'}
         if method == 'POST' and target == '/api/login':
             try:
                 value = strict_json(body)
@@ -240,7 +234,7 @@ class Application:
             except (ValueError, UnicodeError):
                 raise HTTPError(400) from None
             token, csrf = self.auth.login(value['password'], peer)
-            cookie = COOKIE+'='+token+'; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=3600'
+            cookie = COOKIE+'='+token+'; Path=/; HttpOnly; SameSite=Strict; Max-Age=3600'
             return self.json_response({'authenticated': True, 'csrf_token': csrf}, {'Set-Cookie': cookie})
         if method == 'GET' and target == '/api/status':
             _, csrf = self.auth.session(headers.get('cookie', ''), peer)
@@ -284,7 +278,7 @@ class Application:
             except (ValueError, UnicodeError):
                 raise HTTPError(400) from None
             self.auth.logout(token)
-            return self.json_response({'authenticated': False}, {'Set-Cookie': COOKIE+'=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0'})
+            return self.json_response({'authenticated': False}, {'Set-Cookie': COOKIE+'=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0'})
         raise HTTPError(404)
 
     @staticmethod
@@ -318,7 +312,6 @@ class Handler(socketserver.BaseRequestHandler):
         deadline.start()
         try:
             self.request.settimeout(10)
-            self.request.do_handshake()
             try:
                 result = self.server.application.dispatch(read_request(self.request), self.client_address[0])
             except HTTPError as error:
@@ -326,8 +319,8 @@ class Handler(socketserver.BaseRequestHandler):
             except (OSError, ValueError, TypeError, RuntimeError):
                 result = 500, b'{"error":"Panel data unavailable."}', {}
             self.request.sendall(wire_response(*result))
-        except (OSError, ssl.SSLError):
-            pass  # No request lines, cookies, credentials or TLS errors in logs.
+        except OSError:
+            pass  # No request lines, cookies, credentials or transport errors in logs.
         finally:
             deadline.cancel()
 
@@ -337,19 +330,10 @@ class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True
     request_queue_size = 16
 
-    def __init__(self, address, context, application):
-        self.context, self.application = context, application
+    def __init__(self, address, application):
+        self.application = application
         self.capacity = threading.BoundedSemaphore(16)
         super().__init__(address, Handler)
-
-    def get_request(self):
-        raw, address = self.socket.accept()
-        try:
-            channel = self.context.wrap_socket(raw, server_side=True, do_handshake_on_connect=False)
-            return channel, address
-        except BaseException:
-            raw.close()
-            raise
 
     def process_request(self, request, client_address):
         if not self.capacity.acquire(blocking=False):
@@ -386,14 +370,8 @@ def main():
     if config != EXPECTED_CONFIG:
         raise Refused('Unexpected panel configuration.')
     auth = Authentication(strict_json(read_protected(Path(config['auth']), limit=16384, secret=True)))
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.minimum_version = ssl.TLSVersion.TLSv1_3
-    context.options |= ssl.OP_NO_COMPRESSION
-    read_protected(Path(config['certificate']), limit=65536)
-    read_protected(Path(config['private_key']), limit=65536, secret=True)
-    context.load_cert_chain(config['certificate'], config['private_key'])
     application = Application(config, auth, schema.validate_snapshot, history_reader=history.query)
-    with Server((config['bind'], config['port']), context, application) as server:
+    with Server((config['bind'], config['port']), application) as server:
         server.serve_forever(poll_interval=.5)
 
 

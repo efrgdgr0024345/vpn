@@ -3,6 +3,7 @@ import base64
 import fcntl
 import grp
 import hashlib
+import http.client
 import hmac
 import json
 import os
@@ -42,16 +43,17 @@ SOURCE_FILES = frozenset(('server.py', 'schema.py', 'collector.py', 'server_diag
                           'static/index.html', 'static/app.js', 'static/style.css'))
 PRESERVED_UNITS = ('openvpn-server@vpn-lab.service', 'vpn-lab-broker.service', 'unbound.service')
 PANEL_UNITS = ('vpn-lab-admin-collector.service', 'vpn-lab-admin.service', 'vpn-lab-admin-observer.service')
-URL = 'https://172.27.240.1:8443'
+URL = 'http://172.27.240.1:8080'
 RULE = ('  iifname "tun-lab" ip saddr @authorized ip daddr 172.27.240.1 '
-        'tcp dport 8443 counter accept comment "vpn-lab-admin"\n')
+        'tcp dport 8080 counter accept comment "vpn-lab-admin"\n')
+LEGACY_RULE = RULE.replace('8080', '8443')
 HOST_DROP = '  iifname "tun-lab" counter drop comment "vpn-lab-block-host"\n'
 STAGE = 'preflight'
 REPORT_FIELDS = frozenset(('version', 'source_commit', 'panel_url', 'web_service_active',
     'collector_service_active', 'history_service_active', 'vpn_runtime_preserved', 'firewall_rule_verified',
-    'vpn_only_listener', 'credential_contents_returned', 'ca_certificate_sha256', 'ca_certificate_pem', 'leaf_spki_pin'))
+    'vpn_only_listener', 'credential_contents_returned', 'legacy_https_closed', 'transport'))
 BOOL_FIELDS = frozenset(('web_service_active', 'collector_service_active', 'history_service_active', 'vpn_runtime_preserved',
-                        'firewall_rule_verified', 'vpn_only_listener', 'credential_contents_returned'))
+                        'firewall_rule_verified', 'vpn_only_listener', 'credential_contents_returned', 'legacy_https_closed'))
 
 
 def certificate_der(value):
@@ -63,16 +65,11 @@ def certificate_der(value):
 
 def validate_report(value):
     if (not isinstance(value, dict) or set(value) != REPORT_FIELDS
-            or type(value['version']) is not int or value['version'] != 1
+            or type(value['version']) is not int or value['version'] != 2
             or not isinstance(value['source_commit'], str) or not re.fullmatch(r'[0-9a-f]{40}', value['source_commit'])
             or value['panel_url'] != URL or any(type(value[k]) is not bool for k in BOOL_FIELDS)
-            or value['credential_contents_returned'] or not isinstance(value['ca_certificate_sha256'], str)
-            or not re.fullmatch(r'[0-9a-f]{64}', value['ca_certificate_sha256'])
-            or not isinstance(value['leaf_spki_pin'], str)
-            or not re.fullmatch(r'sha256//[A-Za-z0-9+/]{43}=', value['leaf_spki_pin'])):
+            or value['credential_contents_returned'] or value['transport'] != 'http-over-vpn'):
         raise ValueError('Unsupported panel installation report.')
-    if hashlib.sha256(certificate_der(value['ca_certificate_pem'])).hexdigest() != value['ca_certificate_sha256']:
-        raise ValueError('Unsupported public panel CA certificate.')
     return value
 
 
@@ -120,9 +117,8 @@ def public_parent():
 
 
 def configuration():
-    return {'version': 1, 'bind': '172.27.240.1', 'port': 8443, 'origin': URL,
+    return {'version': 1, 'bind': '172.27.240.1', 'port': 8080, 'origin': URL,
             'snapshot': '/run/vpn-lab-admin/status.json', 'auth': str(CONFIG/'auth.json'),
-            'certificate': str(CONFIG/'server.crt'), 'private_key': str(CONFIG/'server.key'),
             'static': str(CODE/'static')}
 
 
@@ -163,8 +159,8 @@ RestrictAddressFamilies=AF_INET AF_UNIX
 IPAddressDeny=any
 IPAddressAllow=172.27.240.0/24
 SocketBindDeny=any
-SocketBindAllow=ipv4:tcp:8443
-InaccessiblePaths=-/etc/openvpn -/etc/shadow -/etc/gshadow -/etc/vpn-lab-admin/ca-private
+SocketBindAllow=ipv4:tcp:8080
+InaccessiblePaths=-/etc/openvpn -/etc/shadow -/etc/gshadow -/etc/vpn-lab-admin/ca-private -/etc/vpn-lab-admin/server.key
 '''+common+'''
 [Install]
 WantedBy=multi-user.target
@@ -254,22 +250,22 @@ def firewall_configuration():
     current = owned(FIREWALL)
     for candidate in (fresh, legacy):
         desired = candidate.replace(HOST_DROP, RULE+HOST_DROP)
-        if current in (candidate, desired):
+        if current in (candidate, desired, candidate.replace(HOST_DROP, LEGACY_RULE+HOST_DROP)):
             return current, desired
     raise server.SetupError('Persistent firewall differs; preserved.')
 
 
 
-def admin_expression():
+def admin_expression(port=8080):
     return [
         {'match': {'op': '==', 'left': {'meta': {'key': 'iifname'}}, 'right': 'tun-lab'}},
         {'match': {'op': '==', 'left': {'payload': {'protocol': 'ip', 'field': 'saddr'}}, 'right': '@authorized'}},
         {'match': {'op': '==', 'left': {'payload': {'protocol': 'ip', 'field': 'daddr'}}, 'right': '172.27.240.1'}},
-        {'match': {'op': '==', 'left': {'payload': {'protocol': 'tcp', 'field': 'dport'}}, 'right': 8443}},
+        {'match': {'op': '==', 'left': {'payload': {'protocol': 'tcp', 'field': 'dport'}}, 'right': port}},
         {'counter': {}}, {'accept': None}]
 
 
-def live_rule():
+def live_rule(allow_legacy=False):
     document = json.loads(server.run(['/usr/sbin/nft', '-j', 'list', 'chain', 'inet', 'vpn_lab', 'input']))
     objects = document['nftables']
     chains = [o['chain'] for o in objects if 'chain' in o]
@@ -296,10 +292,25 @@ def live_rule():
         return False, drops[0]['handle']
     expr = matches[0].get('expr')
     normalized = normalize(expr)
-    if (len(matches) != 1 or normalized != admin_expression()
+    if (len(matches) != 1 or normalized not in ([admin_expression(), admin_expression(8443)] if allow_legacy else [admin_expression()])
             or rules.index(matches[0]) >= rules.index(drops[0])):
         raise server.SetupError('Existing panel firewall exception differs; preserved.')
     return True, drops[0]['handle']
+
+
+def legacy_rule_handle():
+    document = json.loads(server.run(['/usr/sbin/nft', '-j', 'list', 'chain', 'inet', 'vpn_lab', 'input']))
+    for item in document['nftables']:
+        rule = item.get('rule', {})
+        if rule.get('comment') == COMMENT:
+            expr = [{key: ({} if key == 'counter' else value) for key,value in entry.items()}
+                    for entry in rule['expr']]
+            if expr == admin_expression(8443):
+                handle = rule.get('handle')
+                if type(handle) is not int or handle < 1:
+                    raise server.SetupError('Unrecognized legacy panel rule handle.')
+                return handle
+    return None
 
 
 def account():
@@ -513,12 +524,12 @@ def preflight_files(values):
             raise server.SetupError('Unexpected files in the panel code directory.')
 
 
-def port_listeners():
+def port_listeners(port=8080):
     lines = server.run(['/usr/bin/ss', '-H', '-lntu'], timeout=5).splitlines()
     listeners = []
     for line in lines:
         fields = line.split()
-        if len(fields) >= 6 and fields[4].rsplit(':', 1)[-1] == '8443':
+        if len(fields) >= 6 and fields[4].rsplit(':', 1)[-1] == str(port):
             listeners.append((fields[0], fields[4]))
     return listeners
 
@@ -529,7 +540,7 @@ def port_in_use():
 
 def listener_private():
     listeners = port_listeners()
-    return bool(listeners) and all(item == ('tcp', '172.27.240.1:8443') for item in listeners)
+    return bool(listeners) and all(item == ('tcp', '172.27.240.1:8080') for item in listeners)
 
 
 def tls_matches_certificate():
@@ -543,6 +554,20 @@ def tls_matches_certificate():
     except (OSError, ValueError, ssl.SSLError):
         return False
 
+
+
+def http_ready():
+    connection = http.client.HTTPConnection('172.27.240.1', 8080, timeout=2)
+    try:
+        # The server itself is not an authorized client; its request must fail.
+        connection.request('GET', '/api/status')
+        response = connection.getresponse()
+        return (response.status == 403 and response.read(1024) == b'{"error":"Request refused."}'
+                and response.getheader('Cache-Control') == 'no-store')
+    except (OSError, http.client.HTTPException):
+        return False
+    finally:
+        connection.close()
 
 
 def install(sources, revision):
@@ -563,18 +588,18 @@ def install(sources, revision):
         before = runtime_identity()
         before_server_config = owned(VPN_CONFIG)
         _, desired_firewall = firewall_configuration()
-        exists, position = live_rule()
+        exists, position = live_rule(allow_legacy=True)
+        legacy_handle = legacy_rule_handle()
         preflight_files(values)
-        if owned(MANIFEST, missing=True) is None and port_in_use():
+        if port_in_use() and owned(CONFIG/'config.json', missing=True) != values[str(CONFIG/'config.json')]:
             raise server.SetupError('The panel port is already occupied; preserved unrelated listener.')
         _, gid = account()
         directory(CONFIG, 0o750, gid)
         directory(EXPORT, 0o700)
         directory(CODE)
         directory(CODE/'static')
-        STAGE = 'private credentials and TLS'
+        STAGE = 'private credentials'
         credentials(gid)
-        ca_digest, spki, ca_public = certificates(gid)
         STAGE = 'protected panel files'
         for path, content in values.items():
             write(path, content, 0o640 if path == str(CONFIG/'config.json') else 0o644,
@@ -587,28 +612,31 @@ def install(sources, revision):
         server.run(['/usr/bin/systemctl', 'enable', *PANEL_UNITS])
         server.run(['/usr/bin/systemctl', 'restart', *PANEL_UNITS])
         deadline = time.monotonic()+20
-        while not (listener_private() and tls_matches_certificate()):
+        while not (listener_private() and http_ready()):
             if time.monotonic() >= deadline:
-                raise server.SetupError('The private HTTPS listener did not start.')
+                raise server.SetupError('The private HTTP listener did not start.')
             time.sleep(.2)
         # Bind and authenticate the private web service before permitting packets.
         STAGE = 'VPN-only firewall exception'
-        if not exists:
+        if not exists or legacy_handle is not None:
             command = ('insert rule inet vpn_lab input position '+str(position)+' '
                        +RULE.strip()+'\n')
+            if legacy_handle is not None:
+                command += 'delete rule inet vpn_lab input handle '+str(legacy_handle)+'\n'
             server.run(['/usr/sbin/nft', '--check', '-f', '-'], data=command)
             server.run(['/usr/sbin/nft', '-f', '-'], data=command)
         write(FIREWALL, desired_firewall)
         verified, _ = live_rule()
         active = [server.run(['/usr/bin/systemctl', 'is-active', unit]).strip() == 'active' for unit in PANEL_UNITS]
         preserved = runtime_identity() == before and owned(VPN_CONFIG) == before_server_config
-        if not verified or not preserved or not all(active):
+        legacy_closed = not port_listeners(8443)
+        if not verified or not preserved or not all(active) or not legacy_closed:
             raise server.SetupError('Panel post-install verification failed.')
-        return validate_report({'version': 1, 'source_commit': revision, 'panel_url': URL,
+        return validate_report({'version': 2, 'source_commit': revision, 'panel_url': URL,
             'web_service_active': active[1], 'collector_service_active': active[0], 'history_service_active': active[2],
             'vpn_runtime_preserved': preserved, 'firewall_rule_verified': verified,
             'vpn_only_listener': True, 'credential_contents_returned': False,
-            'ca_certificate_sha256': ca_digest, 'ca_certificate_pem': ca_public, 'leaf_spki_pin': spki})
+            'legacy_https_closed': legacy_closed, 'transport': 'http-over-vpn'})
 
 
 if __name__ == '__main__':

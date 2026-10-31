@@ -433,7 +433,7 @@ def execute(operation, environment, run=bounded_run):
             raise LabError('External VPN test failed at '+report['stage']+'; see the validated report.')
         if operation == 'install-admin-panel' and not all(report[key] for key in (
                 'web_service_active', 'collector_service_active', 'history_service_active', 'vpn_runtime_preserved',
-                'firewall_rule_verified', 'vpn_only_listener')):
+                'firewall_rule_verified', 'vpn_only_listener', 'legacy_https_closed')):
             raise LabError('Panel installation did not pass every live verification; see the validated report.')
     print('Lab '+operation+' completed; runner key file removed.')
 

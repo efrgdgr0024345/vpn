@@ -165,7 +165,7 @@ class Tracker:
         sport=value['source_port'] if outbound else value['destination_port']
         dport=value['destination_port'] if outbound else value['source_port']
         # Exclude this panel's own polling to avoid an observation feedback loop.
-        if remote=='172.27.240.1' and dport==8443: return
+        if remote=='172.27.240.1' and dport in (8080,8443): return
         if dport==53 and value['protocol'] in ('tcp','udp'):
             if outbound:
                 for domain,kind in self.dns(value):

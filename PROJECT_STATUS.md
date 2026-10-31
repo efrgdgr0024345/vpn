@@ -1,5 +1,20 @@
 # Project history and current status
 
+## Owner-requested HTTP transport — 31 October 2026
+
+The owner selected plain HTTP inside the encrypted VPN, using the normal browser
+without certificate imports or an isolated profile. The new target is
+`http://172.27.240.1:8080`. The panel retains its separate administrator login,
+peer-bound expiring sessions, exact Host/Origin checks and CSRF protection. Its
+host-only HttpOnly/SameSite cookie now works over HTTP. Public access remains
+blocked by the authorized-source/TUN firewall rule and private bind.
+
+The migration recognizes only the protected existing panel installation and
+exact legacy rule. It replaces the panel rule in one nft transaction, closes the
+8443 listener, and preserves admin credentials, private history, VPN identities
+and existing VPN/broker/DNS runtime. Matching-revision GitHub functional/security
+checks and actual deployment evidence are recorded separately after completion.
+
 ## Private panel deployed — 31 October 2026
 
 Release `060ee7708bd27a6849ee1e5783dcc0d55ef87de6` passed all five functional

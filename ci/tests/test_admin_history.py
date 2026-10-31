@@ -48,7 +48,7 @@ class PacketTests(unittest.TestCase):
         history.validate_record(row)
         self.assertTrue(row['reply_observed']);self.assertGreater(row['reply_bytes'],0)
         self.assertNotIn('payload',row)
-        tracker.observe(packet(destination='172.27.240.1',dport=8443),3000)
+        for port in (8080,8443): tracker.observe(packet(destination='172.27.240.1',dport=port),3000)
         self.assertEqual(len(tracker.pending),1)
 
     def test_udp_dns_and_segmented_tcp_dns(self):

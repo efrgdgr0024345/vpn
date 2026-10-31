@@ -41,9 +41,10 @@ class PanelInstallationTests(unittest.TestCase):
         self.stack.enter_context(patch.object(panel, 'account', return_value=(self.uid, self.gid)))
         self.stack.enter_context(patch.object(panel, 'runtime_identity', return_value={'vpn': ('77', '100')}))
         self.stack.enter_context(patch.object(panel, 'listener_private', return_value=True))
-        self.stack.enter_context(patch.object(panel, 'tls_matches_certificate', return_value=True))
+        self.stack.enter_context(patch.object(panel, 'http_ready', return_value=True))
         self.firewall_installed = False
-        self.stack.enter_context(patch.object(panel, 'live_rule', side_effect=lambda: (self.firewall_installed, 30)))
+        self.stack.enter_context(patch.object(panel, 'live_rule', side_effect=lambda **kw: (self.firewall_installed, 30)))
+        self.stack.enter_context(patch.object(panel,'legacy_rule_handle',return_value=None))
         self.commands = []
         self.stack.enter_context(patch.object(server, 'run', side_effect=self.fake_run))
         self.directory(server.CONFIG)
@@ -121,6 +122,25 @@ class PanelInstallationTests(unittest.TestCase):
         panel.install(self.sources, self.revision)
         self.assertFalse(any(argv[:3] == ['/usr/sbin/nft', '-f', '-'] for argv, _ in self.commands))
         self.assertEqual(panel.FIREWALL.read_text().count(panel.RULE), 1)
+
+    def test_legacy_https_rule_is_replaced_in_one_nft_transaction(self):
+        panel.install(self.sources,self.revision)
+        old_config=json.loads((panel.CONFIG/'config.json').read_text())
+        old_config.update(port=8443,origin='https://172.27.240.1:8443',certificate=str(panel.CONFIG/'server.crt'),private_key=str(panel.CONFIG/'server.key'))
+        self.write(panel.CONFIG/'config.json',json.dumps(old_config))
+        record=json.loads(panel.MANIFEST.read_text())
+        record['files'][str(panel.CONFIG/'config.json')]=hashlib.sha256((panel.CONFIG/'config.json').read_bytes()).hexdigest()
+        self.write(panel.MANIFEST,json.dumps(record))
+        self.write(panel.FIREWALL,panel.FIREWALL.read_text().replace(panel.RULE,panel.LEGACY_RULE))
+        panel.legacy_rule_handle.return_value=77
+        self.commands.clear()
+        report=panel.install(self.sources,'b'*40)
+        batches=[data for argv,data in self.commands if argv[:3]==['/usr/sbin/nft','-f','-']]
+        self.assertEqual(len(batches),1)
+        self.assertIn('tcp dport 8080',batches[0]);self.assertIn('delete rule inet vpn_lab input handle 77',batches[0])
+        self.assertTrue(report['legacy_https_closed'])
+        self.assertNotIn(panel.LEGACY_RULE,panel.FIREWALL.read_text())
+        panel.certificates.assert_not_called()
 
     def test_known_migrated_legacy_ipv6_exceptions_are_preserved(self):
         original = panel.FIREWALL.read_text()
@@ -201,7 +221,7 @@ class PanelInstallationTests(unittest.TestCase):
         self.assertIn('User=vpn-lab-admin\n', web)
         self.assertIn('CapabilityBoundingSet=\n', web)
         self.assertNotIn('RuntimeDirectory=', web)
-        self.assertIn('SocketBindAllow=ipv4:tcp:8443', web)
+        self.assertIn('SocketBindAllow=ipv4:tcp:8080', web)
         self.assertIn('Group=vpn-lab-admin\n', collector)
         self.assertIn('ReadWritePaths=/run/vpn-lab-admin', collector)
         self.assertNotIn('PrivateNetwork=yes', collector)

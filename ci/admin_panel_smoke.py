@@ -1,7 +1,7 @@
-"""Actual unprivileged panel/TLS over a real VPN in disposable CI namespaces.
+"""Actual unprivileged panel/HTTP over a real VPN in disposable CI namespaces.
 
 Systemd lifecycle is substituted in the container; accounts, files, credentials,
-certificates, nftables, OpenVPN and the separate web UID are real.
+legacy certificates, nftables, OpenVPN and the separate web UID are real.
 """
 import hashlib
 import http.client
@@ -65,10 +65,8 @@ def counter():
     return sum(item['counter']['packets'] for item in rules[0]['expr'] if 'counter' in item)
 
 
-def https(method, route, body=None, headers=None):
-    context = ssl.create_default_context(cafile='/etc/vpn-lab-admin/ca.crt')
-    context.minimum_version = ssl.TLSVersion.TLSv1_3
-    connection = http.client.HTTPSConnection('172.27.240.1', 8443, context=context, timeout=8)
+def request_panel(method, route, body=None, headers=None):
+    connection = http.client.HTTPConnection('172.27.240.1', 8080, timeout=8)
     try:
         connection.request(method, route, body=body, headers=headers or {})
         response = connection.getresponse()
@@ -118,22 +116,22 @@ def client():
             if sys.stdin.readline().strip() != 'probe':
                 raise RuntimeError('Panel namespace did not receive its probe signal.')
             headers = {'Origin': installer.URL, 'Content-Type': 'application/json'}
-            status, _, _ = https('GET', '/api/status')
+            status, _, _ = request_panel('GET', '/api/status')
             if status != 401:
                 raise RuntimeError('The private panel did not require a separate login.')
-            status, _, _ = https('POST', '/api/login', json.dumps({'password': 'intentionally-invalid-panel-password'}), headers)
+            status, _, _ = request_panel('POST', '/api/login', json.dumps({'password': 'intentionally-invalid-panel-password'}), headers)
             if status != 401:
                 raise RuntimeError('An incorrect panel password was not rejected.')
             password = Path('/root/vpn-lab/admin/login.txt').read_text().strip()
-            status, response_headers, body = https('POST', '/api/login', json.dumps({'password': password}), headers)
+            status, response_headers, body = request_panel('POST', '/api/login', json.dumps({'password': password}), headers)
             cookie = response_headers.get('Set-Cookie', '')
-            if status != 200 or not all(flag in cookie for flag in ('Secure', 'HttpOnly', 'SameSite=Strict')):
+            if 'Secure' in cookie or status != 200 or not all(flag in cookie for flag in ('HttpOnly', 'SameSite=Strict')):
                 raise RuntimeError('The private panel login or secure cookie failed.')
             value = json.loads(body)
             if password.encode() in body or set(value) != {'authenticated', 'csrf_token'}:
                 raise RuntimeError('The panel login response exposed unexpected data.')
             authenticated = {**headers, 'Cookie': cookie.split(';', 1)[0]}
-            status, _, body = https('GET', '/api/status', headers=authenticated)
+            status, _, body = request_panel('GET', '/api/status', headers=authenticated)
             report = json.loads(body)
             if (status != 200 or not report.get('available') or report.get('stale')
                     or report['snapshot']['authorization']['element_count'] != 1
@@ -141,7 +139,7 @@ def client():
                 raise RuntimeError('The panel did not display the real authorized VPN session.')
             if password.encode() in body or b'BEGIN PRIVATE' in body or b'SESS_ID_' in body:
                 raise RuntimeError('The public panel snapshot exposed credential material.')
-            if https('GET', '/api/history')[0] != 401:
+            if request_panel('GET', '/api/history')[0] != 401:
                 raise RuntimeError('Private history did not require authentication.')
             # This fixture ignores redirect-gateway to preserve its control path.
             # Route the synthetic destination explicitly through the VPN.
@@ -153,7 +151,7 @@ def client():
                 probe.sendto(b'synthetic fixture', ('198.51.100.99', 443))
             deadline=time.monotonic()+10
             while True:
-                status, _, body = https('GET', '/api/history?device=kali', headers=authenticated)
+                status, _, body = request_panel('GET', '/api/history?device=kali', headers=authenticated)
                 history=json.loads(body)
                 rows=history.get('records', [])
                 if (status==200 and history.get('collector_running')
@@ -163,16 +161,15 @@ def client():
                 if time.monotonic()>=deadline:
                     raise RuntimeError('Private metadata history missed real VPN test packets.')
                 time.sleep(.2)
-            if any(row['destination_port']==8443 for row in rows):
+            if any(row['destination_port'] in (8080,8443) for row in rows):
                 raise RuntimeError('Private history captured its own polling traffic.')
-            status, _, ca = https('GET', '/ca.crt')
-            if status != 200 or ca != Path('/etc/vpn-lab-admin/ca.crt').read_bytes():
-                raise RuntimeError('The public panel CA did not match the checked trust anchor.')
-            status, _, _ = https('POST', '/api/logout', '{}', authenticated)
+            if request_panel('GET','/ca.crt')[0] != 404:
+                raise RuntimeError('The HTTP panel exposed a retired certificate route.')
+            status, _, _ = request_panel('POST', '/api/logout', '{}', authenticated)
             if status != 403:
                 raise RuntimeError('Panel logout did not enforce CSRF protection.')
-            status, _, _ = https('POST', '/api/logout', '{}', {**authenticated, 'X-CSRF-Token': value['csrf_token']})
-            if status != 200 or https('GET', '/api/status', headers=authenticated)[0] != 401:
+            status, _, _ = request_panel('POST', '/api/logout', '{}', {**authenticated, 'X-CSRF-Token': value['csrf_token']})
+            if status != 200 or request_panel('GET', '/api/status', headers=authenticated)[0] != 401:
                 raise RuntimeError('Panel logout did not invalidate the browser session.')
         finally:
             if vpn.poll() is None:
@@ -184,7 +181,7 @@ def client():
             print('vpn stopped', flush=True)
             if sys.stdin.readline().strip() != 'finish':
                 raise RuntimeError('The panel client cleanup was not confirmed.')
-    print('PASS private panel HTTPS and authentication', flush=True)
+    print('PASS private panel HTTP and authentication', flush=True)
 
 
 def run(daemons):
@@ -232,19 +229,51 @@ def run(daemons):
                 raise RuntimeError('Private panel installation failed during '+installer.STAGE+'.') from None
             if not result['vpn_runtime_preserved']:
                 raise RuntimeError('Panel installation changed the active VPN services.')
-            panel_private = [installer.EXPORT/'login.txt', installer.CONFIG/'auth.json',
-                             installer.CONFIG/'server.key', installer.CONFIG/'ca-private'/'ca.key']
+            # Reconstruct a protected legacy HTTPS deployment to exercise the
+            # real 8443 -> 8080 migration and atomic firewall-rule replacement.
+            # Only the legacy listener is a stand-in; filesystem, TLS and nft are real.
+            with patch.object(foundation,'run',side_effect=lifecycle):
+                installer.certificates(pwd.getpwnam(installer.USER).pw_gid)
+            web=panel_processes['vpn-lab-admin.service']
+            os.killpg(web.pid,signal.SIGTERM);web.wait(timeout=5)
+            old_config=installer.configuration()
+            old_config.update(port=8443,origin='https://172.27.240.1:8443',
+                certificate=str(installer.CONFIG/'server.crt'),private_key=str(installer.CONFIG/'server.key'))
+            (installer.CONFIG/'config.json').write_text(json.dumps(old_config,sort_keys=True)+'\n')
+            manifest=json.loads(installer.MANIFEST.read_text())
+            manifest['files'][str(installer.CONFIG/'config.json')]=hashlib.sha256((installer.CONFIG/'config.json').read_bytes()).hexdigest()
+            installer.MANIFEST.write_text(json.dumps(manifest,sort_keys=True)+'\n')
+            installer.FIREWALL.write_text(installer.FIREWALL.read_text().replace(installer.RULE,installer.LEGACY_RULE))
+            objects=json.loads(command(['/usr/sbin/nft','-j','list','chain','inet','vpn_lab','input']))['nftables']
+            old_rule=next(item['rule'] for item in objects if item.get('rule',{}).get('comment')==installer.COMMENT)
+            command(['/usr/sbin/nft','-f','-'],data='replace rule inet vpn_lab input handle '+str(old_rule['handle'])+' '+installer.LEGACY_RULE.strip()+'\n')
+            legacy_code = """import http.server,ssl
+server=http.server.HTTPServer(('172.27.240.1',8443),http.server.BaseHTTPRequestHandler)
+context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.load_cert_chain('/etc/vpn-lab-admin/server.crt','/etc/vpn-lab-admin/server.key')
+server.socket=context.wrap_socket(server.socket,server_side=True)
+server.serve_forever()
+"""
+            account=pwd.getpwnam(installer.USER)
+            panel_processes['vpn-lab-admin.service']=subprocess.Popen(['/usr/bin/python3','-I','-B','-c',legacy_code],
+                stdin=subprocess.DEVNULL,stdout=output,stderr=subprocess.STDOUT,start_new_session=True,
+                user=account.pw_uid,group=account.pw_gid,extra_groups=[])
+            deadline=time.monotonic()+10
+            while not installer.tls_matches_certificate():
+                if time.monotonic()>=deadline: raise RuntimeError('The isolated legacy HTTPS fixture did not start.')
+                time.sleep(.1)
+            panel_private = [installer.EXPORT/'login.txt', installer.CONFIG/'auth.json', installer.CONFIG/'server.key', installer.CONFIG/'ca-private'/'ca.key']
             private_before = [path.read_bytes() for path in panel_private]
             with patch.object(foundation, 'run', side_effect=lifecycle):
                 repeated = installer.install(sources, 'a'*40)
             if ([path.read_bytes() for path in panel_private] != private_before
-                    or repeated['ca_certificate_sha256'] != result['ca_certificate_sha256']):
+                    or not repeated['legacy_https_closed']):
                 raise RuntimeError('A panel installer retry changed its private identity.')
             process = panel_processes['vpn-lab-admin.service']
             fields = dict(line.split(':', 1) for line in Path('/proc', str(process.pid), 'status').read_text().splitlines() if ':' in line)
             if int(fields['Uid'].split()[0]) == 0 or int(fields['CapEff'].strip(), 16) != 0:
                 raise RuntimeError('The panel web process retained root or effective capabilities.')
-            if https('GET', '/api/status')[0] != 403:
+            if request_panel('GET', '/api/status')[0] != 403:
                 raise RuntimeError('The panel accepted a host-local request outside its VPN peer policy.')
             before_counter = counter()
             child = subprocess.Popen(['/usr/bin/unshare', '--mount', '--net', '--pid', '--fork', '--mount-proc',
@@ -290,7 +319,7 @@ def run(daemons):
             child.stdin.write('probe\n')
             child.stdin.flush()
             if receive(child, timeout=45) != 'vpn stopped':
-                raise RuntimeError('The private panel HTTPS or authentication test failed.')
+                raise RuntimeError('The private panel HTTP or authentication test failed.')
             deadline = time.monotonic()+25
             while True:
                 objects = json.loads(command(['/usr/sbin/nft', '-j', 'list', 'set', 'inet', 'vpn_lab', 'authorized']))['nftables']
@@ -303,17 +332,17 @@ def run(daemons):
             child.stdin.write('finish\n')
             child.stdin.flush()
             completion = receive(child)
-            if completion != 'PASS private panel HTTPS and authentication':
+            if completion != 'PASS private panel HTTP and authentication':
                 if completion.startswith('FAIL ') and re.fullmatch(r'[A-Za-z0-9 ,/_.()\-]{1,150}', completion[5:]):
                     raise RuntimeError(completion[5:])
                 raise RuntimeError('The private panel test did not finish cleanly.')
             child.wait(timeout=10)
             if child.returncode or counter() <= before_counter:
-                raise RuntimeError('Panel HTTPS did not traverse the private authorization firewall rule.')
+                raise RuntimeError('Panel HTTP did not traverse the private authorization firewall rule.')
             if (any(process.pid != before_pids[name] or process.poll() is not None for name, process in daemons.items())
                     or any(hashlib.sha256(Path(path).read_bytes()).digest() != digest for path, digest in identities.items())):
                 raise RuntimeError('Panel installation or tests changed VPN identities or existing daemons.')
-            print('PASS: actual private panel installation, unprivileged web UID, separate TLS/admin login, CSRF/logout, real VPN-only firewall path and unchanged VPN identities/daemons.', flush=True)
+            print('PASS: actual HTTP panel installation and legacy HTTPS migration, unprivileged web UID, separate admin login, CSRF/logout, real VPN-only firewall path and unchanged VPN identities/daemons.', flush=True)
         finally:
             if child is not None:
                 if child.poll() is None:

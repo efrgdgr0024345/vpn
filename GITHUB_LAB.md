@@ -15,7 +15,7 @@ lab droplet. The working Access Server is outside this workflow's scope.
 | `prepare-test-access` | Create or verify a dedicated root-protected SSH test identity on the lab. Return its public key/fingerprint only; its private key stays on the lab. Requires matching build checks. |
 | `inspect-test-peer` | From the lab, verify an external test machine's supplied host fingerprint and inspect it using the dedicated test key. Fixed read-only inventory; no package, service or network changes. |
 | `test-from-peer` | Prepare the peer's client tools, then run a real external VPN connection, private DNS, public forwarding and verified HTTPS in its own network namespace. Uses a fresh temporary certificate and restores/revokes it afterward. Requires matching build checks. |
-| `install-admin-panel` | Add the private read-only HTTPS panel and status collector without restarting the working VPN. Requires matching functional/security checks; see VPN_ADMIN.md. |
+| `install-admin-panel` | Add or migrate the private read-only HTTP panel and collectors without restarting the working VPN. Requires matching functional/security checks; see VPN_ADMIN.md. |
 | `install-foundation` | Provision the disposable Debian 13 OpenVPN foundation, replacing its firewall and retiring old runner services. |
 | `test-foundation` | Test the running VPN locally without exporting its credentials or changing host routes/DNS. |
 | `probe-udp` | Send a random non-secret UDP probe from the GitHub runner and observe its arrival on the lab's external interface. No VPN credentials are exported. |

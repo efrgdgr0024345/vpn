@@ -1,4 +1,4 @@
-"""Private panel HTTP/auth boundaries and an actual isolated TLS exchange."""
+"""Private panel HTTP/auth boundaries and an actual isolated HTTP exchange."""
 import base64
 import copy
 import hashlib
@@ -74,11 +74,11 @@ class RequestTests(unittest.TestCase):
 
     def test_split_transport_reads_are_reassembled_with_exact_body(self):
         body = b'{"password":"fixture"}'
-        raw = b'POST /api/login HTTP/1.1\r\nHost: 172.27.240.1:8443\r\nContent-Type: application/json\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body
+        raw = b'POST /api/login HTTP/1.1\r\nHost: 172.27.240.1:8080\r\nContent-Type: application/json\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body
         for chunk in (1, 7, 8192):
             method, target, headers, value = self.parse(raw, chunk)
             self.assertEqual((method, target, value), ('POST', '/api/login', body))
-            self.assertEqual(headers['host'], '172.27.240.1:8443')
+            self.assertEqual(headers['host'], '172.27.240.1:8080')
 
     def test_duplicate_and_conflicting_framing_headers_are_refused(self):
         examples = [b'Host: one\r\nHost: two', b'Content-Length: 0\r\ncontent-length: 2',
@@ -208,7 +208,7 @@ class ApplicationTests(unittest.TestCase):
                                      schema.validate_snapshot, reader=reader, clock=lambda: self.now)
 
     def request(self, method, path, body=None, headers=None, peer=PEER):
-        defaults = {'host': '172.27.240.1:8443'}
+        defaults = {'host': '172.27.240.1:8080'}
         if method == 'POST':
             defaults['origin'] = panel.EXPECTED_CONFIG['origin']
         defaults.update(headers or {})
@@ -251,9 +251,11 @@ class ApplicationTests(unittest.TestCase):
 
     def test_cookie_flags_and_success_response_do_not_disclose_verifier(self):
         cookie, csrf, headers = self.login()
-        for flag in ('Path=/', 'Secure', 'HttpOnly', 'SameSite=Strict', 'Max-Age=3600'):
+        for flag in ('Path=/', 'HttpOnly', 'SameSite=Strict', 'Max-Age=3600'):
             self.assertIn(flag, headers['Set-Cookie'])
-        self.assertTrue(cookie.startswith('__Host-'))
+        self.assertTrue(cookie.startswith('vpn-admin-http='))
+        self.assertNotIn('Secure', headers['Set-Cookie'])
+        self.assertNotIn('Domain=', headers['Set-Cookie'])
         self.assertRegex(csrf, r'\A[A-Za-z0-9_-]{43}\Z')
         self.assertNotIn(PASSWORD, json.dumps(headers))
 
@@ -277,7 +279,7 @@ class ApplicationTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(panel.HTTPError) as error:
                 self.request('POST', '/api/login', value)
             self.assertEqual(error.exception.status, 400)
-        headers = {'host': '172.27.240.1:8443', 'origin': panel.EXPECTED_CONFIG['origin']}
+        headers = {'host': '172.27.240.1:8080', 'origin': panel.EXPECTED_CONFIG['origin']}
         with self.assertRaises(panel.HTTPError) as error:
             self.app.dispatch(('POST', '/api/login', headers, b'{"password":"a","password":"b"}'), PEER)
         self.assertEqual(error.exception.status, 400)
@@ -323,7 +325,7 @@ class ApplicationTests(unittest.TestCase):
                 self.request('GET', target)
             self.assertEqual(error.exception.status, 404)
         self.assertEqual(self.reads, before)
-        for target in ('/', '/static/app.js', '/static/style.css', '/ca.crt'):
+        for target in ('/', '/static/app.js', '/static/style.css'):
             self.assertEqual(self.request('GET', target)[0], 200)
 
     def test_wire_security_headers_close_connections_and_never_reflect_requests(self):
@@ -370,153 +372,86 @@ class ProtectedFileTests(unittest.TestCase):
                     panel.read_protected(value)
 
 
-class RealTLSPanelTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.temporary = tempfile.TemporaryDirectory()
-        root = Path(cls.temporary.name)
-        cls.key, cls.cert = root/'key.pem', root/'cert.pem'
-        subprocess.run(['/usr/bin/openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
-                        '-keyout', str(cls.key), '-out', str(cls.cert), '-days', '1',
-                        '-subj', '/CN=localhost', '-addext', 'subjectAltName=DNS:localhost'],
-                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                       check=True, timeout=20)
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.temporary.cleanup()
-
-    def exchange(self, context, address, request):
-        with socket.create_connection(address, timeout=5) as raw:
-            with context.wrap_socket(raw, server_hostname='localhost') as connection:
-                self.assertEqual(connection.version(), 'TLSv1.3')
-                connection.sendall(request)
-                data = bytearray()
-                while True:
-                    part = connection.recv(8192)
-                    if not part:
-                        return bytes(data)
-                    data.extend(part)
-                    self.assertLess(len(data), 300000)
-
-    def contexts(self):
-        server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        server.minimum_version = ssl.TLSVersion.TLSv1_3
-        server.load_cert_chain(self.cert, self.key)
-        client = ssl.create_default_context(cafile=str(self.cert))
-        client.minimum_version = ssl.TLSVersion.TLSv1_3
-        return server, client
+class RealHTTPPanelTests(unittest.TestCase):
+    def exchange(self, address, request):
+        with socket.create_connection(address, timeout=5) as connection:
+            connection.sendall(request)
+            data=bytearray()
+            while True:
+                part=connection.recv(8192)
+                if not part: return bytes(data)
+                data.extend(part)
+                self.assertLess(len(data),300000)
 
     def test_absolute_deadline_closes_a_nonidle_slow_request(self):
-        server_context, client_context = self.contexts()
-        original_timer = threading.Timer
-        def deadline(interval, callback):
-            self.assertEqual(interval, 15)
-            return original_timer(.2, callback)
+        original_timer=threading.Timer
+        def deadline(interval,callback):
+            self.assertEqual(interval,15)
+            return original_timer(.2,callback)
         class NeverDispatch:
-            def dispatch(self, request, peer):
+            def dispatch(self,request,peer):
                 raise AssertionError('Incomplete request reached application.')
-        with patch.object(panel.threading, 'Timer', side_effect=deadline), \
-             panel.Server(('127.0.0.1', 0), server_context, NeverDispatch()) as server:
-            thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': .01}, daemon=True)
-            thread.start()
+        with patch.object(panel.threading,'Timer',side_effect=deadline), panel.Server(('127.0.0.1',0),NeverDispatch()) as server:
+            thread=threading.Thread(target=server.serve_forever,kwargs={'poll_interval':.01},daemon=True);thread.start()
             try:
-                with socket.create_connection(server.server_address, timeout=2) as raw:
-                    with client_context.wrap_socket(raw, server_hostname='localhost') as connection:
-                        connection.sendall(b'POST /api/login HTTP/1.1\r\nHost: 172.27.240.1:8443\r\nContent-Type: application/json\r\nContent-Length: 512\r\n\r\n')
-                        started = time.monotonic()
-                        # Bytes keep arriving well inside the socket's inactivity
-                        # timeout. Only the separate absolute deadline ends this.
-                        while time.monotonic()-started < .9:
-                            try:
-                                connection.sendall(b'x')
-                            except OSError:
-                                break
-                            time.sleep(.025)
-                        else:
-                            self.fail('Trickled request bypassed the absolute connection deadline.')
-            finally:
-                server.shutdown()
-                thread.join(timeout=5)
+                with socket.create_connection(server.server_address,timeout=2) as connection:
+                    connection.sendall(b'POST /api/login HTTP/1.1\r\nHost: 172.27.240.1:8080\r\nContent-Type: application/json\r\nContent-Length: 512\r\n\r\n')
+                    started=time.monotonic()
+                    while time.monotonic()-started<.9:
+                        try: connection.sendall(b'x')
+                        except OSError: break
+                        time.sleep(.025)
+                    else: self.fail('Trickled request bypassed deadline.')
+            finally: server.shutdown();thread.join(timeout=5)
 
-    def test_saturated_admission_rejects_tls_without_dispatching(self):
-        server_context, client_context = self.contexts()
-        calls = []
+    def test_saturated_admission_rejects_requests_without_dispatching(self):
+        calls=[]
         class NeverDispatch:
-            def dispatch(self, request, peer):
-                calls.append(request)
-                return 200, b'{}', {}
-        with panel.Server(('127.0.0.1', 0), server_context, NeverDispatch()) as server:
-            for _ in range(16):
-                self.assertTrue(server.capacity.acquire(blocking=False))
-            thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': .01}, daemon=True)
-            thread.start()
+            def dispatch(self,request,peer): calls.append(request);return 200,b'{}',{}
+        with panel.Server(('127.0.0.1',0),NeverDispatch()) as server:
+            for _ in range(16): self.assertTrue(server.capacity.acquire(blocking=False))
+            thread=threading.Thread(target=server.serve_forever,kwargs={'poll_interval':.01},daemon=True);thread.start()
             try:
-                with socket.create_connection(server.server_address, timeout=2) as raw:
-                    with self.assertRaises((ssl.SSLError, ConnectionResetError)):
-                        client_context.wrap_socket(raw, server_hostname='localhost')
-                self.assertEqual(calls, [])
+                with socket.create_connection(server.server_address,timeout=2) as connection:
+                    self.assertEqual(connection.recv(1),b'')
+                self.assertEqual(calls,[])
             finally:
-                for _ in range(16):
-                    server.capacity.release()
-                server.shutdown()
-                thread.join(timeout=5)
+                for _ in range(16): server.capacity.release()
+                server.shutdown();thread.join(timeout=5)
 
-    def test_real_tls_login_status_cookie_logout_and_generic_errors(self):
-        authentication = panel.Authentication(copy.deepcopy(VERIFIER))
-        value = snapshot()
-        value['monotonic'] = panel.time.monotonic()
-        def reader(path, **kwargs):
-            return json.dumps(value).encode() if Path(path) == Path(panel.EXPECTED_CONFIG['snapshot']) else b'public fixture'
-        app = panel.Application(copy.deepcopy(panel.EXPECTED_CONFIG), authentication,
-                                schema.validate_snapshot, reader=reader)
-        # Loopback is used only by this isolated test harness. Production keeps
-        # the real VPN peer and rejects localhost at the application boundary.
+    def test_real_http_login_cookie_status_logout_and_generic_errors(self):
+        import http.cookiejar
+        import urllib.request
+        authentication=panel.Authentication(copy.deepcopy(VERIFIER))
+        value=snapshot();value['monotonic']=panel.time.monotonic()
+        def reader(path,**kwargs):
+            return json.dumps(value).encode() if Path(path)==Path(panel.EXPECTED_CONFIG['snapshot']) else b'public fixture'
+        app=panel.Application(copy.deepcopy(panel.EXPECTED_CONFIG),authentication,schema.validate_snapshot,reader=reader)
         class VPNPeerFixture:
-            def dispatch(self, request, peer):
-                return app.dispatch(request, PEER)
-        server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        server_context.minimum_version = ssl.TLSVersion.TLSv1_3
-        server_context.load_cert_chain(self.cert, self.key)
-        client_context = ssl.create_default_context(cafile=str(self.cert))
-        client_context.minimum_version = ssl.TLSVersion.TLSv1_3
-        log = io.StringIO()
-        with panel.Server(('127.0.0.1', 0), server_context, VPNPeerFixture()) as server, \
-             redirect_stdout(log), redirect_stderr(log):
-            thread = threading.Thread(target=server.serve_forever, kwargs={'poll_interval': .02}, daemon=True)
-            thread.start()
+            def dispatch(self,request,peer): return app.dispatch(request,PEER)
+        log=io.StringIO()
+        with panel.Server(('127.0.0.1',0),VPNPeerFixture()) as server, redirect_stdout(log), redirect_stderr(log):
+            thread=threading.Thread(target=server.serve_forever,kwargs={'poll_interval':.02},daemon=True);thread.start()
             try:
-                def request(method, target, body=b'', extra=b''):
-                    headers = (method+' '+target+' HTTP/1.1\r\nHost: 172.27.240.1:8443\r\n').encode()
-                    if method == 'POST':
-                        headers += b'Origin: https://172.27.240.1:8443\r\nContent-Type: application/json\r\nContent-Length: '+str(len(body)).encode()+b'\r\n'
-                    return headers+extra+b'\r\n'+body
-                body = json.dumps({'password': PASSWORD}).encode()
-                response = self.exchange(client_context, server.server_address, request('POST', '/api/login', body))
-                head, raw = response.split(b'\r\n\r\n', 1)
-                self.assertTrue(head.startswith(b'HTTP/1.1 200'))
-                cookie = next(line.split(b': ', 1)[1].split(b';', 1)[0] for line in head.split(b'\r\n') if line.startswith(b'Set-Cookie:'))
-                csrf = json.loads(raw)['csrf_token']
-                response = self.exchange(client_context, server.server_address,
-                                         request('GET', '/api/status', extra=b'Cookie: '+cookie+b'\r\n'))
-                self.assertTrue(response.startswith(b'HTTP/1.1 200'))
-                self.assertFalse(json.loads(response.split(b'\r\n\r\n', 1)[1])['stale'])
-                response = self.exchange(client_context, server.server_address,
-                                         request('POST', '/api/logout', b'{}', b'Cookie: '+cookie+b'\r\nX-CSRF-Token: '+csrf.encode()+b'\r\n'))
-                self.assertTrue(response.startswith(b'HTTP/1.1 200'))
-                response = self.exchange(client_context, server.server_address,
-                                         request('GET', '/api/status', extra=b'Cookie: '+cookie+b'\r\n'))
-                self.assertTrue(response.startswith(b'HTTP/1.1 401'))
-                response = self.exchange(client_context, server.server_address,
-                                         request('POST', '/api/login', b'PRIVATE_SENTINEL_NOT_JSON'))
-                self.assertTrue(response.startswith(b'HTTP/1.1 400'))
-                self.assertNotIn(b'PRIVATE_SENTINEL', response)
-                legacy_context = ssl.create_default_context(cafile=str(self.cert))
-                legacy_context.maximum_version = ssl.TLSVersion.TLSv1_2
-                with socket.create_connection(server.server_address, timeout=5) as raw_socket:
-                    with self.assertRaises(ssl.SSLError):
-                        legacy_context.wrap_socket(raw_socket, server_hostname='localhost')
-            finally:
-                server.shutdown()
-                thread.join(timeout=5)
-        self.assertEqual(log.getvalue(), '')
+                cookies=http.cookiejar.CookieJar()
+                browser=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPCookieProcessor(cookies))
+                origin='http://127.0.0.1:'+str(server.server_address[1])
+                def request(method,target,body=None,extra=None):
+                    headers={'Host':'172.27.240.1:8080'}
+                    if method=='POST': headers.update({'Origin':'http://172.27.240.1:8080','Content-Type':'application/json'})
+                    headers.update(extra or {})
+                    req=urllib.request.Request(origin+target,data=json.dumps(body).encode() if body is not None else None,headers=headers,method=method)
+                    return browser.open(req,timeout=5)
+                with request('POST','/api/login',{'password':PASSWORD}) as response:
+                    csrf=json.load(response)['csrf_token']
+                    self.assertNotIn('Secure',response.headers['Set-Cookie'])
+                self.assertEqual(len(cookies),1)
+                self.assertFalse(next(iter(cookies)).secure)
+                with request('GET','/api/status') as response: self.assertFalse(json.load(response)['stale'])
+                with request('POST','/api/logout',{}, {'X-CSRF-Token':csrf}) as response: self.assertEqual(response.status,200)
+                with self.assertRaises(urllib.error.HTTPError) as error: request('GET','/api/status')
+                self.assertEqual(error.exception.code,401)
+                response=self.exchange(server.server_address,b'POST /api/login HTTP/1.1\r\nHost: 172.27.240.1:8080\r\nOrigin: http://172.27.240.1:8080\r\nContent-Type: application/json\r\nContent-Length: 16\r\n\r\nPRIVATE_SENTINEL')
+                self.assertTrue(response.startswith(b'HTTP/1.1 400'));self.assertNotIn(b'PRIVATE_SENTINEL',response)
+            finally: server.shutdown();thread.join(timeout=5)
+        self.assertEqual(log.getvalue(),'')
