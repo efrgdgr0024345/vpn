@@ -1,5 +1,23 @@
 # Project history and current status
 
+## Physical temporary IPv6 test reported successful — 31 October 2026
+
+The owner reports that browsing worked during the temporary IPv6-off experiment
+and an online check showed no IPv6 address. This is owner-reported connectivity
+evidence, not an independent packet-leak test or proof of kernel boot disablement.
+The owner requests permanent kernel disablement and reports booting in safe mode
+with several Kali versions available. Confirm installed/recovery/live boot state
+and writable root before applying persistent GRUB settings; do not infer separate
+OS installations or compromise from multiple recovery/kernel entries.
+
+For temporary-test revision `8dfcb69`, main functional run 41168405120 and security
+analysis passed. Duplicate branch run 41168405255 failed its composite final
+server-networking baseline comparison in the isolated diagnostics fixture after
+external VPN/DNS/HTTPS succeeded. The exact changed component is unconfirmed;
+its resolver/routes/firewall comparisons need separate diagnostic outcomes before
+assigning a cause. The temporary IPv6 script is not executed in that server
+fixture. No live server changes or weakened assertions were made in response.
+
 ## Kali setup logic review — 31 October 2026
 
 A focused source review found that the Kali IPv6 setup checked saved drop-ins and
