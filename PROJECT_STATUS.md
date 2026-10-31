@@ -1,5 +1,24 @@
 # Project history and current status
 
+## Private panel deployed — 31 October 2026
+
+Release `060ee7708bd27a6849ee1e5783dcc0d55ef87de6` passed all five functional
+GitHub jobs (41176317960) and security analysis (41176318006). After the owner
+renewed the existing SSH grant, gated deployment 41176557075 succeeded on
+170.64.224.131. The live installer verified the private HTTPS listener/TLS leaf,
+all three panel services, the narrow authorization-dependent firewall rule and
+unchanged VPN runtime/configuration. No credentials or browsing history were
+returned. Public CA identity and deployment evidence are in
+`deployments/admin-panel.json`.
+
+The panel is available through the VPN at `https://172.27.240.1:8443`. The owner
+must prepare its separate browser trust profile and test login/history; that
+browser acceptance is still pending. Local checks include 308 administration/
+security tests, 175 desktop tests, synthetic Chromium desktop/mobile checks and
+the full disposable VPN regression. Container systemd lifecycle was emulated;
+the deployment used the actual service units. No root-resistant attestation or
+complete browsing-history visibility is claimed.
+
 ## Private network history extension — 31 October 2026
 
 The owner selected 30-day retention with a storage cap. The panel extension adds
@@ -13,9 +32,9 @@ Capacity can remove records earlier. No browsing records enter GitHub reports.
 Unit checks and synthetic browser checks pass. The disposable real-VPN panel
 phase verifies actual captured DNS/destination records, history authentication,
 self-polling exclusion, and unchanged VPN processes/credentials. Broader VPN
-regressions and exact-revision GitHub gates are recorded after completion.
-Deployment remains pending renewal of the rejected temporary SSH authorization;
-this entry does not claim installation or live history collection.
+regressions, exact-revision GitHub gates and live installation subsequently
+passed as recorded above. Actual history presentation still requires owner
+browser acceptance.
 
 ## VPN-only read-only admin panel implementation — 31 October 2026
 
@@ -45,9 +64,9 @@ GitHub report; admin passwords and all private keys stay on the VPS. A dedicated
 Firefox profile avoids altering global browser/OS trust. VPN_ADMIN.md describes
 trust setup, observations and limits.
 
-No production panel is installed yet. The existing GitHub SSH attempt
-41171990373 was rejected; the owner was asked to renew the existing temporary
-server grant. Repository source/tests and previews are separate from deployment.
+Initial deployment was blocked when GitHub SSH attempt 41171990373 was rejected.
+The owner subsequently renewed the grant; successful installation is recorded
+above. Repository source/tests and previews remain distinct from live evidence.
 The owner has not selected additional management controls; this first view is
 read-only. The configured one-VPN-session limit remains unchanged.
 
