@@ -170,3 +170,22 @@ nftables exception while preserving VPN identities and daemon processes.
 
 Administrator passwords and private history stay outside the Git repository. Live
 installation/connection evidence is recorded separately after it exists.
+
+## Client-side verification and destination identity
+
+The server panel cannot establish the laptop's current resolver or firewall
+state. `ops/live_vpn_check.py` checks an existing client session without changing
+settings. Its `--watch` mode repeats sampled checks; `--json` provides structured
+results for a future local display. It requires explicit sudo and the pinned
+`DIAGNOSTICS_SOURCE` dependency (the checksum is embedded in the script).
+This checker is not yet installed on the owner's Kali machine or wired into a
+tray indicator. Its local integrity baseline trusts root and is not remote
+attestation. Public exit-IP confirmation, browser proxy/DoH settings and browser
+certificate state are not established by its result.
+
+For external websites, browser HTTPS certificate/hostname validation provides
+destination authentication. Matching a DNS log with the text entered in a
+browser does not establish that the page or server is authentic. Full browser
+URL/certificate display requires a browser integration; the VPN sees destination
+flows and observable DNS questions, not HTTPS paths or contents. The HTTP choice
+for this private panel does not disable HTTPS on external websites.

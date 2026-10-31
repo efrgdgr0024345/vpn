@@ -1,5 +1,25 @@
 # Project history and current status
 
+## HTTP panel migration deployed — 31 October 2026
+
+Release `8949ffb5ccf34d2465b1ae172c277d6d63f99219` passed functional checks
+41179381520 and security analysis 41179381464. Gated deployment 41179658504
+succeeded: HTTP at `http://172.27.240.1:8080` is VPN-only, the 8443 listener is
+closed, and all panel services remain active. VPN/broker/DNS runtime was preserved.
+No certificate setup or browser helper is needed. Administrator credentials and
+history were preserved; browser acceptance is still pending.
+
+The read-only `ops/live_vpn_check.py` provides a separate sampled check of an
+already active Kali session, without connecting/disconnecting or changing
+networking. It pins and reuses the existing diagnostics source, verifies local
+installed-code baselines, expected VPN policy/TLS status, routes, exact guard,
+resolver configuration, boot IPv6 disablement, private DNS over UDP/TCP, system
+resolution and interface-bound certificate-verified HTTPS. Missing evidence is
+unknown; probes are withheld when required local checks fail. Its initial six
+unit regressions pass. It is source-only until owner Kali acceptance and does
+not yet provide a taskbar icon or browser URL/certificate integration. A DNS
+activity list alone does not detect man-in-the-middle attacks.
+
 ## Owner-requested HTTP transport — 31 October 2026
 
 The owner selected plain HTTP inside the encrypted VPN, using the normal browser
