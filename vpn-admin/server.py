@@ -258,8 +258,11 @@ class Application:
         if method == 'GET' and (target == '/api/history' or target.startswith('/api/history?')):
             self.auth.session(headers.get('cookie', ''), peer)
             try:
-                values = parse_qs(target.partition('?')[2], keep_blank_values=True,
-                                  strict_parsing=True, max_num_fields=7, errors='strict')
+                query = target.partition('?')[2]
+                # Python 3.10 treats an empty query as an invalid empty field
+                # under strict_parsing; the default view has no filters.
+                values = parse_qs(query, keep_blank_values=True,
+                                  strict_parsing=True, max_num_fields=7, errors='strict') if query else {}
                 if any(len(items) != 1 for items in values.values()):
                     raise ValueError()
                 parameters = {key: items[0] for key, items in values.items()}

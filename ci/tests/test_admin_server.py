@@ -232,6 +232,11 @@ class ApplicationTests(unittest.TestCase):
         status,body,_=self.request('GET','/api/history?device=kali&search=example.com',headers=headers)
         self.assertEqual(status,200)
         self.assertEqual(calls,[{'device':'kali','search':'example.com'}])
+        for target in ('/api/history','/api/history?'):
+            status,_,_=self.request('GET',target,headers=headers)
+            self.assertEqual(status,200)
+        self.assertEqual(calls[-2:],[{},{}])
+
         with self.assertRaises(panel.HTTPError) as error:
             self.request('GET','/api/history?device=kali&device=android',headers=headers)
         self.assertEqual(error.exception.status,400)
